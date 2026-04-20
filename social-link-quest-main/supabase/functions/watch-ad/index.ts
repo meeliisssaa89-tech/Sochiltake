@@ -24,6 +24,12 @@ Deno.serve(async (req) => {
     (settingsRows || []).forEach((s: any) => { settings[s.key] = s.value; });
     const ads = settings.ads_daily || { daily_count: 10, reward_per_ad: 10, xp_per_ad: 5 };
 
+    if (!ads.enabled && ads.enabled !== undefined) {
+      return new Response(JSON.stringify({ error: 'Ads are disabled' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     if (slotIndex >= ads.daily_count) {
       return new Response(JSON.stringify({ error: 'Daily limit reached' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -32,44 +38,93 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Determine reward currency
-    const symbol = settings.reward_currency_symbol || 'PTS';
-    const { data: cur } = await supabase.from('currencies').select('id').eq('symbol', symbol).eq('is_active', true).maybeSingle();
-    const currencyId = cur?.id || null;
+    // Determine reward currency — try configured symbol first, then fall back to first active currency
+    const symbol = settings.reward_currency_symbol;
+    let currencyId: string | null = null;
+
+    if (symbol) {
+      const { data: cur } = await supabase
+        .from('currencies')
+        .select('id')
+        .eq('symbol', symbol)
+        .eq('is_active', true)
+        .maybeSingle();
+      currencyId = cur?.id || null;
+    }
+
+    // Fallback: use the first active currency if specific one not found
+    if (!currencyId) {
+      const { data: firstCur } = await supabase
+        .from('currencies')
+        .select('id')
+        .eq('is_active', true)
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      currencyId = firstCur?.id || null;
+    }
 
     // Insert ad watch (unique per user/date/slot)
     const { error: insertErr } = await supabase.from('ad_watches').insert({
-      user_id: userId, watch_date: today, slot_index: slotIndex,
-      reward_amount: ads.reward_per_ad, reward_currency_id: currencyId, xp_reward: ads.xp_per_ad
+      user_id: userId,
+      watch_date: today,
+      slot_index: slotIndex,
+      reward_amount: ads.reward_per_ad,
+      reward_currency_id: currencyId,
+      xp_reward: ads.xp_per_ad
     });
+
     if (insertErr) {
-      return new Response(JSON.stringify({ error: insertErr.message.includes('duplicate') ? 'Slot already claimed' : insertErr.message }), {
+      const isDuplicate = insertErr.message.includes('duplicate') || insertErr.code === '23505';
+      return new Response(JSON.stringify({ error: isDuplicate ? 'Slot already claimed' : insertErr.message }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
     // Credit balance
     if (currencyId && ads.reward_per_ad > 0) {
-      const { data: bal } = await supabase.from('balances').select('amount').eq('user_id', userId).eq('currency_id', currencyId).maybeSingle();
+      const { data: bal } = await supabase
+        .from('balances')
+        .select('amount')
+        .eq('user_id', userId)
+        .eq('currency_id', currencyId)
+        .maybeSingle();
+
       if (bal) {
-        await supabase.from('balances').update({ amount: Number(bal.amount) + ads.reward_per_ad }).eq('user_id', userId).eq('currency_id', currencyId);
+        await supabase
+          .from('balances')
+          .update({ amount: Number(bal.amount) + Number(ads.reward_per_ad) })
+          .eq('user_id', userId)
+          .eq('currency_id', currencyId);
       } else {
-        await supabase.from('balances').insert({ user_id: userId, currency_id: currencyId, amount: ads.reward_per_ad });
+        await supabase
+          .from('balances')
+          .insert({ user_id: userId, currency_id: currencyId, amount: Number(ads.reward_per_ad) });
       }
     }
 
     // Add XP
     if (ads.xp_per_ad > 0) {
-      const { data: u } = await supabase.from('users').select('exp').eq('telegram_id', userId).maybeSingle();
+      const { data: u } = await supabase
+        .from('users')
+        .select('exp')
+        .eq('telegram_id', userId)
+        .maybeSingle();
+
       if (u) {
-        const newExp = (u.exp || 0) + ads.xp_per_ad;
-        await supabase.from('users').update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 }).eq('telegram_id', userId);
+        const newExp = (Number(u.exp) || 0) + Number(ads.xp_per_ad);
+        await supabase
+          .from('users')
+          .update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 })
+          .eq('telegram_id', userId);
       }
     }
 
     // Activity feed
     await supabase.from('activity_feed').insert({
-      user_id: userId, type: 'ad_watched', message: `Ad #${slotIndex + 1} watched`,
+      user_id: userId,
+      type: 'ad_watched',
+      message: `Ad #${slotIndex + 1} watched`,
       meta: { reward: ads.reward_per_ad, xp: ads.xp_per_ad }
     });
 

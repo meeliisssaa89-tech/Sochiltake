@@ -152,7 +152,9 @@ export function AdminAdsView() {
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Zap className="w-4 h-4 text-accent" /> Ad Platforms
         </h3>
-        <p className="text-[10px] text-muted-foreground">Enable multiple platforms — they will all work simultaneously when users click the watch button.</p>
+        <p className="text-[10px] text-muted-foreground">
+          Enable each platform and fill in its details. When binding is set to "All Platforms", Adgram runs first then Monetag in sequence before the reward is given.
+        </p>
         {PLATFORMS.map(({ key, label, desc, color }) => {
           const cfg = platforms[key] || { ...defaultPlatform };
           return (
@@ -181,9 +183,24 @@ export function AdminAdsView() {
                     </div>
                   )}
                   {key === "montag" && (
-                    <div>
-                      <label className="text-[10px] text-muted-foreground">App / Zone ID</label>
-                      <Input value={cfg.zone_id} onChange={(e) => updatePlatform(key, "zone_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. 9876543" />
+                    <div className="space-y-1.5">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">App / Zone ID</label>
+                        <Input value={cfg.zone_id} onChange={(e) => updatePlatform(key, "zone_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. 9876543" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">SDK Script (injected in &lt;head&gt;)</label>
+                        <Textarea
+                          value={cfg.sdk_html}
+                          onChange={(e) => updatePlatform(key, "sdk_html", e.target.value)}
+                          rows={3}
+                          className="text-xs font-mono"
+                          placeholder={'<script src="https://...monetag..."></script>'}
+                        />
+                        <p className="text-[9px] text-muted-foreground/70 mt-1">
+                          Paste the Monetag SDK script tag here. It will be auto-injected into the page head.
+                        </p>
+                      </div>
                     </div>
                   )}
                   {key === "custom" && (
@@ -214,17 +231,20 @@ export function AdminAdsView() {
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Link2 className="w-4 h-4 text-primary" /> Button Bindings
         </h3>
-        <p className="text-[10px] text-muted-foreground">Link each button to the ad platform it should trigger.</p>
+        <p className="text-[10px] text-muted-foreground">
+          Choose which ad platform each button triggers. Use <strong>All Platforms</strong> to run Adgram then Monetag in sequence.
+        </p>
         {BUTTON_SLOTS.map(({ key, label }) => (
           <div key={key}>
             <label className="text-[10px] text-muted-foreground">{label}</label>
             <select
-              value={(bindings as any)[key] || "custom"}
+              value={(bindings as any)[key] || "none"}
               onChange={(e) => setBindings({ ...bindings, [key]: e.target.value })}
               className="w-full h-8 text-xs rounded-lg border border-border bg-card px-2 mt-0.5"
             >
-              <option value="adgram">Adgram</option>
-              <option value="montag">Monetag</option>
+              <option value="all">All Platforms (Adgram → Monetag)</option>
+              <option value="adgram">Adgram only</option>
+              <option value="montag">Monetag only</option>
               <option value="custom">Custom / Other</option>
               <option value="none">None (fallback timer)</option>
             </select>

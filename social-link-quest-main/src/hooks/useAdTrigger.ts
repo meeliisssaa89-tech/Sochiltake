@@ -50,8 +50,8 @@ export function useAdTrigger() {
     }
     try {
       const controller = sdk.init({ blockId });
-      await controller.show();
-      return true;
+      const result = await controller.show();
+      return result?.done !== false;
     } catch (err) {
       console.warn("[Adsgram] show failed:", err);
       return false;
@@ -62,21 +62,42 @@ export function useAdTrigger() {
     if (!zoneId) return false;
     const fnName = `show_${zoneId}`;
     if (typeof window[fnName] === "function") {
-      try { await window[fnName](); return true; } catch (e) { console.warn("[Monetag] function failed:", e); }
+      try {
+        await window[fnName]();
+        return true;
+      } catch (e) {
+        console.warn("[Monetag] function failed:", e);
+      }
     }
     if (typeof window.show_ad === "function") {
-      try { await window.show_ad(zoneId); return true; } catch (e) { console.warn("[Monetag] show_ad failed:", e); }
+      try {
+        await window.show_ad(zoneId);
+        return true;
+      } catch (e) {
+        console.warn("[Monetag] show_ad failed:", e);
+      }
     }
+    console.warn("[Monetag] No callable function found for zone:", zoneId);
     return false;
   };
 
   const triggerCustom = async (zoneId: string): Promise<boolean> => {
     if (!zoneId) return false;
     if (typeof window[zoneId] === "function") {
-      try { await window[zoneId](); return true; } catch (e) { console.warn("[Custom] function failed:", e); }
+      try {
+        await window[zoneId]();
+        return true;
+      } catch (e) {
+        console.warn("[Custom] function failed:", e);
+      }
     }
     if (typeof window.show_ad === "function") {
-      try { await window.show_ad(zoneId); return true; } catch (e) { /* ignore */ }
+      try {
+        await window.show_ad(zoneId);
+        return true;
+      } catch (e) {
+        console.warn("[Custom] show_ad failed:", e);
+      }
     }
     return false;
   };
@@ -89,33 +110,55 @@ export function useAdTrigger() {
 
   const triggerAd = async (slot: AdSlot): Promise<boolean> => {
     const platform = getPlatform(slot);
-    if (platform === "none") return true;
 
-    if (platform === "adgram") {
+    if (platform === "none") {
+      return await timerFallback();
+    }
+
+    let anySucceeded = false;
+
+    if (platform === "adgram" || platform === "all") {
       const cfg = platforms.adgram;
       if (cfg?.enabled && cfg.block_id) {
+        console.log("[Ads] Triggering Adgram...");
         const ok = await triggerAdgram(cfg.block_id);
-        if (ok) return true;
+        if (ok) {
+          anySucceeded = true;
+          console.log("[Ads] Adgram completed successfully");
+        }
       }
     }
 
-    if (platform === "montag") {
+    if (platform === "montag" || platform === "all") {
       const cfg = platforms.montag;
       if (cfg?.enabled && cfg.zone_id) {
+        console.log("[Ads] Triggering Monetag...");
         const ok = await triggerMontag(cfg.zone_id);
-        if (ok) return true;
+        if (ok) {
+          anySucceeded = true;
+          console.log("[Ads] Monetag completed successfully");
+        }
       }
     }
 
     if (platform === "custom") {
       const cfg = platforms.custom;
       if (cfg?.enabled && cfg.zone_id) {
+        console.log("[Ads] Triggering Custom...");
         const ok = await triggerCustom(cfg.zone_id);
-        if (ok) return true;
+        if (ok) {
+          anySucceeded = true;
+          console.log("[Ads] Custom ad completed successfully");
+        }
       }
     }
 
-    return await timerFallback();
+    if (!anySucceeded) {
+      console.warn("[Ads] No ad platform succeeded, using timer fallback");
+      return await timerFallback();
+    }
+
+    return true;
   };
 
   const isConfigured = (slot: AdSlot): boolean => {
