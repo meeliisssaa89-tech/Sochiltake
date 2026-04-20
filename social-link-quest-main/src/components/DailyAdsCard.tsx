@@ -44,7 +44,7 @@ export function DailyAdsCard() {
 
     try {
       if (isConfigured("daily_ads")) {
-        await triggerAd("daily_ads");
+        await triggerAd("daily_ads", watchedCount);
       } else {
         setCountdown(adsConfig.duration_seconds || 15);
         await new Promise<void>((resolve) => {

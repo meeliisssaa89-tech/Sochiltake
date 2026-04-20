@@ -14,6 +14,7 @@ declare global {
 interface PlatformConfig {
   enabled: boolean;
   block_id: string;
+  block_ids?: string[];
   zone_id: string;
   sdk_html: string;
   debug?: boolean;
@@ -42,6 +43,14 @@ export function useAdTrigger() {
 
   const getPlatform = (slot: AdSlot): string => (bindings as any)[slot] || "none";
 
+  const getAdgramBlockId = (cfg: PlatformConfig, slotIndex: number): string => {
+    const ids = cfg.block_ids?.filter((id) => id.trim()) || [];
+    if (ids.length > 0) {
+      return ids[slotIndex % ids.length];
+    }
+    return cfg.block_id || "";
+  };
+
   const triggerAdgram = async (blockId: string, debug = false): Promise<boolean> => {
     if (!blockId) return false;
     const sdk = window.Adsgram;
@@ -61,24 +70,29 @@ export function useAdTrigger() {
 
   const triggerMontag = async (zoneId: string): Promise<boolean> => {
     if (!zoneId) return false;
-    const fnName = `show_${zoneId}`;
-    if (typeof window[fnName] === "function") {
-      try {
-        await window[fnName]();
-        return true;
-      } catch (e) {
-        console.warn("[Monetag] function failed:", e);
+
+    const candidates = [
+      `show_${zoneId}`,
+      `monetag_${zoneId}`,
+      "show_ad",
+      "invokeAdUnit",
+      "_monetag_show",
+      "montag_show",
+    ];
+
+    for (const fnName of candidates) {
+      if (typeof window[fnName] === "function") {
+        try {
+          await window[fnName](zoneId);
+          console.log(`[Monetag] triggered via ${fnName}`);
+          return true;
+        } catch (e) {
+          console.warn(`[Monetag] ${fnName} failed:`, e);
+        }
       }
     }
-    if (typeof window.show_ad === "function") {
-      try {
-        await window.show_ad(zoneId);
-        return true;
-      } catch (e) {
-        console.warn("[Monetag] show_ad failed:", e);
-      }
-    }
-    console.warn("[Monetag] No callable function found for zone:", zoneId);
+
+    console.warn("[Monetag] No callable trigger found — using timer wait instead");
     return false;
   };
 
@@ -103,63 +117,87 @@ export function useAdTrigger() {
     return false;
   };
 
-  const timerFallback = async (): Promise<boolean> => {
-    const secs = adsConfig.duration_seconds || 15;
+  const timerFallback = async (seconds?: number): Promise<boolean> => {
+    const secs = seconds ?? adsConfig.duration_seconds ?? 15;
     await new Promise<void>((resolve) => setTimeout(resolve, secs * 1000));
     return true;
   };
 
-  const triggerAd = async (slot: AdSlot): Promise<boolean> => {
+  const triggerAd = async (slot: AdSlot, slotIndex = 0): Promise<boolean> => {
     const platform = getPlatform(slot);
 
     if (platform === "none") {
       return await timerFallback();
     }
 
-    let anySucceeded = false;
-
-    if (platform === "adgram" || platform === "all") {
+    if (platform === "adgram") {
       const cfg = platforms.adgram;
-      if (cfg?.enabled && cfg.block_id) {
-        console.log("[Ads] Triggering Adgram...", cfg.debug ? "(debug mode)" : "");
-        const ok = await triggerAdgram(cfg.block_id, cfg.debug || false);
-        if (ok) {
-          anySucceeded = true;
-          console.log("[Ads] Adgram completed successfully");
+      if (cfg?.enabled) {
+        const blockId = getAdgramBlockId(cfg, slotIndex);
+        if (blockId) {
+          console.log(`[Ads] Adgram → blockId: ${blockId}${cfg.debug ? " (debug)" : ""}`);
+          const ok = await triggerAdgram(blockId, cfg.debug || false);
+          if (ok) return true;
         }
       }
+      return await timerFallback();
     }
 
-    if (platform === "montag" || platform === "all") {
+    if (platform === "montag") {
       const cfg = platforms.montag;
       if (cfg?.enabled && cfg.zone_id) {
-        console.log("[Ads] Triggering Monetag...");
+        console.log("[Ads] Monetag → zoneId:", cfg.zone_id);
         const ok = await triggerMontag(cfg.zone_id);
-        if (ok) {
-          anySucceeded = true;
-          console.log("[Ads] Monetag completed successfully");
-        }
+        if (ok) return true;
       }
+      return await timerFallback();
     }
 
     if (platform === "custom") {
       const cfg = platforms.custom;
       if (cfg?.enabled && cfg.zone_id) {
-        console.log("[Ads] Triggering Custom...");
         const ok = await triggerCustom(cfg.zone_id);
-        if (ok) {
-          anySucceeded = true;
-          console.log("[Ads] Custom ad completed successfully");
-        }
+        if (ok) return true;
       }
-    }
-
-    if (!anySucceeded) {
-      console.warn("[Ads] No ad platform succeeded, using timer fallback");
       return await timerFallback();
     }
 
-    return true;
+    if (platform === "all") {
+      let totalShown = 0;
+
+      const adgramCfg = platforms.adgram;
+      if (adgramCfg?.enabled) {
+        const blockId = getAdgramBlockId(adgramCfg, slotIndex);
+        if (blockId) {
+          console.log(`[Ads] [1/2] Adgram → blockId: ${blockId}${adgramCfg.debug ? " (debug)" : ""}`);
+          const ok = await triggerAdgram(blockId, adgramCfg.debug || false);
+          if (ok) totalShown++;
+          else console.warn("[Ads] Adgram failed/skipped, continuing to Monetag");
+        }
+      }
+
+      const montagCfg = platforms.montag;
+      if (montagCfg?.enabled && montagCfg.zone_id) {
+        console.log("[Ads] [2/2] Monetag → zoneId:", montagCfg.zone_id);
+        const ok = await triggerMontag(montagCfg.zone_id);
+        if (ok) {
+          totalShown++;
+        } else {
+          console.warn("[Ads] Monetag JS trigger unavailable — waiting timer for Monetag slot");
+          await timerFallback(adsConfig.duration_seconds || 15);
+          totalShown++;
+        }
+      }
+
+      if (totalShown === 0) {
+        console.warn("[Ads] No platform ran — using timer fallback");
+        return await timerFallback();
+      }
+
+      return true;
+    }
+
+    return await timerFallback();
   };
 
   const isConfigured = (slot: AdSlot): boolean => {

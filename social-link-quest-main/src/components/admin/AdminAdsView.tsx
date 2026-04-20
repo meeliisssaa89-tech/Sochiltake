@@ -6,11 +6,12 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Loader2, Zap, Link2 } from "lucide-react";
+import { Save, Loader2, Zap, Link2, Plus, Trash2 } from "lucide-react";
 
 interface PlatformConfig {
   enabled: boolean;
   block_id: string;
+  block_ids: string[];
   zone_id: string;
   sdk_html: string;
   debug?: boolean;
@@ -32,7 +33,14 @@ interface ButtonBindings {
   promo_redeem: string;
 }
 
-const defaultPlatform: PlatformConfig = { enabled: false, block_id: "", zone_id: "", sdk_html: "", debug: false };
+const defaultPlatform: PlatformConfig = {
+  enabled: false,
+  block_id: "",
+  block_ids: [],
+  zone_id: "",
+  sdk_html: "",
+  debug: false,
+};
 
 const PLATFORMS = [
   { key: "adgram", label: "Adgram", desc: "Telegram-native ad network", color: "text-blue-400" },
@@ -83,7 +91,22 @@ export function AdminAdsView() {
       setAds((prev) => ({ ...prev, ...(settings.ads_daily as object) }));
     }
     if (settings.ads_platforms && typeof settings.ads_platforms === "object") {
-      setPlatforms((prev) => ({ ...prev, ...(settings.ads_platforms as object) }));
+      const saved = settings.ads_platforms as Record<string, any>;
+      setPlatforms((prev) => {
+        const merged: Record<string, PlatformConfig> = { ...prev };
+        for (const k of Object.keys(saved)) {
+          merged[k] = {
+            ...defaultPlatform,
+            ...saved[k],
+            block_ids: Array.isArray(saved[k]?.block_ids)
+              ? saved[k].block_ids
+              : saved[k]?.block_id
+              ? [saved[k].block_id]
+              : [],
+          };
+        }
+        return merged;
+      });
     }
     if (settings.ads_bindings && typeof settings.ads_bindings === "object") {
       setBindings((prev) => ({ ...prev, ...(settings.ads_bindings as object) }));
@@ -105,6 +128,22 @@ export function AdminAdsView() {
 
   const updatePlatform = (key: string, field: keyof PlatformConfig, value: any) => {
     setPlatforms((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+  };
+
+  const addBlockId = (platformKey: string) => {
+    const ids = [...(platforms[platformKey]?.block_ids || []), ""];
+    updatePlatform(platformKey, "block_ids", ids);
+  };
+
+  const removeBlockId = (platformKey: string, idx: number) => {
+    const ids = (platforms[platformKey]?.block_ids || []).filter((_, i) => i !== idx);
+    updatePlatform(platformKey, "block_ids", ids);
+  };
+
+  const updateBlockId = (platformKey: string, idx: number, val: string) => {
+    const ids = [...(platforms[platformKey]?.block_ids || [])];
+    ids[idx] = val;
+    updatePlatform(platformKey, "block_ids", ids);
   };
 
   if (settingsLoading) {
@@ -154,7 +193,7 @@ export function AdminAdsView() {
           <Zap className="w-4 h-4 text-accent" /> Ad Platforms
         </h3>
         <p className="text-[10px] text-muted-foreground">
-          Enable each platform and fill in its details. When binding is set to "All Platforms", Adgram runs first then Monetag in sequence before the reward is given.
+          Enable each platform. When "All Platforms" is selected, Adgram runs first then Monetag sequentially before the reward is given.
         </p>
         {PLATFORMS.map(({ key, label, desc, color }) => {
           const cfg = platforms[key] || { ...defaultPlatform };
@@ -170,32 +209,93 @@ export function AdminAdsView() {
                   <Switch checked={cfg.enabled} onCheckedChange={(v) => updatePlatform(key, "enabled", v)} />
                 </div>
               </div>
+
               {cfg.enabled && (
                 <>
                   {key === "adgram" && (
-                    <div className="space-y-1.5">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">Block ID</label>
-                        <Input value={cfg.block_id} onChange={(e) => updatePlatform(key, "block_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. int-26108" />
+                    <div className="space-y-2">
+                      {/* Multiple Block IDs */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] text-muted-foreground font-medium">
+                            Block IDs
+                            <span className="ms-1 text-[9px] text-muted-foreground/60">
+                              (each ad slot rotates through these)
+                            </span>
+                          </label>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[10px] px-2 gap-1"
+                            onClick={() => addBlockId(key)}
+                          >
+                            <Plus className="w-3 h-3" /> Add Block ID
+                          </Button>
+                        </div>
+
+                        {(cfg.block_ids || []).length === 0 && (
+                          <p className="text-[9px] text-muted-foreground/60 bg-secondary/40 rounded p-2 text-center">
+                            No Block IDs added yet. Click "Add Block ID" to add one.
+                          </p>
+                        )}
+
+                        {(cfg.block_ids || []).map((bid, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-muted-foreground w-5 shrink-0 text-right">
+                              {idx + 1}.
+                            </span>
+                            <Input
+                              value={bid}
+                              onChange={(e) => updateBlockId(key, idx, e.target.value)}
+                              className="h-7 text-xs flex-1"
+                              placeholder={`Block ID ${idx + 1} — e.g. int-26108`}
+                            />
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                              onClick={() => removeBlockId(key, idx)}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+
+                        {(cfg.block_ids || []).length > 1 && (
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
+                            <p className="text-[9px] text-blue-400">
+                              <strong>How rotation works:</strong> Slot 1 → Block ID 1, Slot 2 → Block ID 2, Slot 3 → Block ID 1 (loops back), and so on. Each ad watch uses the next Block ID in order.
+                            </p>
+                          </div>
+                        )}
                       </div>
+
+                      {/* Debug Mode */}
                       <div className="flex items-center justify-between bg-yellow-500/10 border border-yellow-500/30 rounded p-2">
                         <div>
                           <p className="text-[10px] text-yellow-500 font-medium">Debug Mode (Test Ads)</p>
-                          <p className="text-[9px] text-muted-foreground">Enable to bypass URL validation. Use when testing. Disable in production.</p>
+                          <p className="text-[9px] text-muted-foreground">Enable to bypass URL validation. Disable in production.</p>
                         </div>
                         <Switch checked={cfg.debug || false} onCheckedChange={(v) => updatePlatform(key, "debug", v)} />
                       </div>
+
                       <p className="text-[9px] text-muted-foreground/70 bg-secondary/60 rounded p-1.5">
                         For production: register this URL in Adsgram's dashboard:{" "}
                         <code className="text-[8px] break-all text-primary">{window.location.origin}</code>
                       </p>
                     </div>
                   )}
+
                   {key === "montag" && (
                     <div className="space-y-1.5">
                       <div>
                         <label className="text-[10px] text-muted-foreground">App / Zone ID</label>
-                        <Input value={cfg.zone_id} onChange={(e) => updatePlatform(key, "zone_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. 9876543" />
+                        <Input
+                          value={cfg.zone_id}
+                          onChange={(e) => updatePlatform(key, "zone_id", e.target.value)}
+                          className="h-8 text-xs"
+                          placeholder="e.g. 9876543"
+                        />
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">SDK Script (injected in &lt;head&gt;)</label>
@@ -212,15 +312,27 @@ export function AdminAdsView() {
                       </div>
                     </div>
                   )}
+
                   {key === "custom" && (
                     <>
                       <div>
                         <label className="text-[10px] text-muted-foreground">Zone / Function name</label>
-                        <Input value={cfg.zone_id} onChange={(e) => updatePlatform(key, "zone_id", e.target.value)} className="h-8 text-xs" placeholder="show_12345" />
+                        <Input
+                          value={cfg.zone_id}
+                          onChange={(e) => updatePlatform(key, "zone_id", e.target.value)}
+                          className="h-8 text-xs"
+                          placeholder="show_12345"
+                        />
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">SDK Script (injected in &lt;head&gt;)</label>
-                        <Textarea value={cfg.sdk_html} onChange={(e) => updatePlatform(key, "sdk_html", e.target.value)} rows={3} className="text-xs font-mono" placeholder='<script src="..."></script>' />
+                        <Textarea
+                          value={cfg.sdk_html}
+                          onChange={(e) => updatePlatform(key, "sdk_html", e.target.value)}
+                          rows={3}
+                          className="text-xs font-mono"
+                          placeholder='<script src="..."></script>'
+                        />
                       </div>
                     </>
                   )}
@@ -229,7 +341,12 @@ export function AdminAdsView() {
             </div>
           );
         })}
-        <Button size="sm" onClick={() => save("ads_platforms", platforms)} disabled={savingKey === "ads_platforms"} className="w-full h-8 text-xs">
+        <Button
+          size="sm"
+          onClick={() => save("ads_platforms", platforms)}
+          disabled={savingKey === "ads_platforms"}
+          className="w-full h-8 text-xs"
+        >
           {savingKey === "ads_platforms" ? <Loader2 className="w-3 h-3 me-1 animate-spin" /> : <Save className="w-3 h-3 me-1" />}
           Save All Platforms
         </Button>
@@ -259,7 +376,12 @@ export function AdminAdsView() {
             </select>
           </div>
         ))}
-        <Button size="sm" onClick={() => save("ads_bindings", bindings)} disabled={savingKey === "ads_bindings"} className="w-full h-8 text-xs">
+        <Button
+          size="sm"
+          onClick={() => save("ads_bindings", bindings)}
+          disabled={savingKey === "ads_bindings"}
+          className="w-full h-8 text-xs"
+        >
           {savingKey === "ads_bindings" ? <Loader2 className="w-3 h-3 me-1 animate-spin" /> : <Save className="w-3 h-3 me-1" />}
           Save Bindings
         </Button>
