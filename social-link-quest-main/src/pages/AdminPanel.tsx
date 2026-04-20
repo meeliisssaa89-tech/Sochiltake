@@ -18,13 +18,15 @@ import { AdminTasksView } from "@/components/admin/AdminTasksView";
 import { AdminSpinView } from "@/components/admin/AdminSpinView";
 import { AdminWalletView } from "@/components/admin/AdminWalletView";
 import { AdminWithdrawalsView } from "@/components/admin/AdminWithdrawalsView";
+import { AdminActivityView } from "@/components/admin/AdminActivityView";
+import { AdminPromoCodesView } from "@/components/admin/AdminPromoCodesView";
 import {
   LayoutDashboard, Users, ListChecks, Coins, Settings, Search, Ban, ArrowLeft,
   TrendingUp, DollarSign, CheckCircle2, UserPlus, Image as ImageIcon, Send,
-  Sparkles, Wallet, Upload, Loader2,
+  Sparkles, Wallet, Upload, Loader2, Trophy, Tag,
 } from "lucide-react";
 
-type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals";
+type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo";
 
 export function AdminPanel() {
   const { t } = useLanguage();
@@ -40,6 +42,8 @@ export function AdminPanel() {
     { id: "ads" as const, icon: TrendingUp, label: t("adsConfig") },
     { id: "spin" as const, icon: Sparkles, label: t("spinManagement") },
     { id: "wallet" as const, icon: Wallet, label: t("walletManagement") },
+    { id: "activity" as const, icon: Trophy, label: t("activityManagement") },
+    { id: "promo" as const, icon: Tag, label: t("promoManagement") },
     { id: "icons" as const, icon: ImageIcon, label: t("appearance") },
     { id: "broadcast" as const, icon: Send, label: t("broadcast") },
     { id: "settings" as const, icon: Settings, label: t("settings") },
@@ -83,6 +87,8 @@ export function AdminPanel() {
         {activeTab === "ads" && <AdminAdsView />}
         {activeTab === "spin" && <AdminSpinView />}
         {activeTab === "wallet" && <AdminWalletView />}
+        {activeTab === "activity" && <AdminActivityView />}
+        {activeTab === "promo" && <AdminPromoCodesView />}
         {activeTab === "icons" && <AdminIconsView />}
         {activeTab === "broadcast" && <AdminBroadcastView />}
         {activeTab === "settings" && <AdminSettingsView />}

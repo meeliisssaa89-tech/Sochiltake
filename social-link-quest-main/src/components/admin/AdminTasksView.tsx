@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useAllTasks, useCurrencies } from "@/hooks/useSupabaseData";
+import { useState, useRef } from "react";
+import { useAllTasks, useCurrencies, useUploadImage } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Save, Edit2, X } from "lucide-react";
+import { AppIcon } from "@/components/AppIcon";
+import { Plus, Trash2, Save, Edit2, X, Upload, Loader2, Star } from "lucide-react";
 
 interface TaskForm {
   id?: string;
@@ -25,13 +26,15 @@ interface TaskForm {
   is_active: boolean;
   is_required: boolean;
   sort_order: number;
+  icon_url: string;
   metadata: Record<string, any>;
 }
 
 const empty: TaskForm = {
   title_en: "", title_ar: "", description_en: "", description_ar: "",
   type: "telegram_join", reward_amount: 100, reward_currency_id: null,
-  xp_reward: 10, is_active: true, is_required: false, sort_order: 0, metadata: {},
+  xp_reward: 10, is_active: true, is_required: false, sort_order: 0,
+  icon_url: "", metadata: {},
 };
 
 export function AdminTasksView() {
@@ -39,10 +42,22 @@ export function AdminTasksView() {
   const { data: currencies } = useCurrencies();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const uploadImage = useUploadImage();
+  const iconInputRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<TaskForm | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   const reset = () => { setEditing(null); setShowForm(false); };
+
+  const handleIconUpload = async (file: File) => {
+    if (!editing) return;
+    try {
+      const url = await uploadImage.mutateAsync({ file, path: `tasks/icon-${Date.now()}` });
+      setEditing({ ...editing, icon_url: url });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    }
+  };
 
   const save = async () => {
     if (!editing) return;
@@ -54,7 +69,9 @@ export function AdminTasksView() {
       type: editing.type, reward_amount: editing.reward_amount,
       reward_currency_id: editing.reward_currency_id, xp_reward: editing.xp_reward,
       is_active: editing.is_active, is_required: editing.is_required,
-      sort_order: editing.sort_order, metadata: editing.metadata,
+      sort_order: editing.sort_order,
+      icon_url: editing.icon_url || null,
+      metadata: editing.metadata,
     };
     let err;
     if (editing.id) {
@@ -89,7 +106,9 @@ export function AdminTasksView() {
       description_en: t.description_en || "", description_ar: t.description_ar || "",
       type: t.type, reward_amount: t.reward_amount, reward_currency_id: t.reward_currency_id,
       xp_reward: t.xp_reward, is_active: t.is_active, is_required: t.is_required,
-      sort_order: t.sort_order, metadata: t.metadata || {},
+      sort_order: t.sort_order,
+      icon_url: t.icon_url || "",
+      metadata: t.metadata || {},
     });
     setShowForm(true);
   };
@@ -108,6 +127,47 @@ export function AdminTasksView() {
             <h3 className="text-sm font-semibold">{editing.id ? "Edit Task" : "New Task"}</h3>
             <Button size="icon" variant="ghost" onClick={reset} className="h-7 w-7"><X className="w-4 h-4" /></Button>
           </div>
+
+          {/* Task Icon */}
+          <div>
+            <label className="text-[10px] text-muted-foreground">Task Icon (optional — supports GIF)</label>
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center overflow-hidden border border-border">
+                {editing.icon_url ? (
+                  <AppIcon src={editing.icon_url} fallback={Star} size={32} className="w-8 h-8 object-contain" />
+                ) : (
+                  <Star className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+              <Input
+                value={editing.icon_url}
+                onChange={(e) => setEditing({ ...editing, icon_url: e.target.value })}
+                placeholder="Paste URL or upload ↓"
+                className="h-8 text-xs flex-1"
+              />
+              <input
+                ref={iconInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleIconUpload(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8 shrink-0"
+                disabled={uploadImage.isPending}
+                onClick={() => iconInputRef.current?.click()}
+              >
+                {uploadImage.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+              </Button>
+            </div>
+          </div>
+
           <div>
             <label className="text-[10px] text-muted-foreground">Title (English)</label>
             <Input value={editing.title_en} onChange={(e) => setEditing({ ...editing, title_en: e.target.value })} className="h-8 text-xs" />
@@ -127,7 +187,7 @@ export function AdminTasksView() {
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-muted-foreground">Type</label>
-              <Select value={editing.type} onValueChange={(v: any) => setEditing({ ...editing, type: v })}>
+              <Select value={editing.type} onValueChange={(v: any) => setEditing({ ...editing, type: v, metadata: {} })}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="telegram_join">Telegram Join</SelectItem>
@@ -162,24 +222,64 @@ export function AdminTasksView() {
             </div>
           </div>
 
-          {/* Metadata field per task type */}
+          {/* Telegram Join metadata */}
           {editing.type === "telegram_join" && (
-            <div>
-              <label className="text-[10px] text-muted-foreground">Channel username (without @)</label>
-              <Input value={editing.metadata?.channel || ""} onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, channel: e.target.value } })} className="h-8 text-xs" placeholder="MyChannel" />
+            <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
+              <p className="text-[10px] font-medium text-primary">Bot Verification Settings</p>
+              <p className="text-[10px] text-muted-foreground">
+                The bot must be an admin in the channel/group for verification to work.
+              </p>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Channel/Group ID (with @ or -100…)</label>
+                <Input
+                  value={editing.metadata?.channel_id || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, channel_id: e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="@MyChannel or -1001234567890"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Channel URL (for Join button)</label>
+                <Input
+                  value={editing.metadata?.channel_url || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, channel_url: e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="https://t.me/MyChannel"
+                />
+              </div>
             </div>
           )}
+
+          {/* Social link metadata */}
           {editing.type === "social_link" && (
-            <>
+            <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
               <div>
                 <label className="text-[10px] text-muted-foreground">Platform (twitter, instagram, tiktok, youtube, website)</label>
-                <Input value={editing.metadata?.platform || ""} onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, platform: e.target.value } })} className="h-8 text-xs" />
+                <Input
+                  value={editing.metadata?.platform || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, platform: e.target.value } })}
+                  className="h-8 text-xs"
+                />
               </div>
               <div>
                 <label className="text-[10px] text-muted-foreground">URL</label>
-                <Input value={editing.metadata?.url || ""} onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, url: e.target.value } })} className="h-8 text-xs" placeholder="https://..." />
+                <Input
+                  value={editing.metadata?.url || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, url: e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="https://..."
+                />
               </div>
-            </>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Min delay (seconds before verify)</label>
+                <Input
+                  type="number"
+                  value={editing.metadata?.min_delay_seconds ?? 10}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, min_delay_seconds: +e.target.value } })}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
           )}
 
           <div className="flex items-center gap-4 pt-1">
@@ -202,11 +302,24 @@ export function AdminTasksView() {
       ) : (
         (tasks || []).map((t: any) => (
           <div key={t.id} className="glass-card rounded-xl p-3 flex items-center gap-2">
+            <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0 overflow-hidden">
+              <AppIcon
+                src={t.icon_url || null}
+                fallback={Star}
+                size={28}
+                className="w-7 h-7 object-contain"
+                playOnClick={false}
+              />
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{t.title_en}</p>
               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <Badge variant="outline" className="text-[9px]">{t.type}</Badge>
-                <span className="text-[10px] text-accent">+{t.reward_amount} {t.currencies?.symbol || "PTS"}</span>
+                {t.reward_amount > 0 && (
+                  <span className="text-[10px] text-accent">
+                    +{t.reward_amount} {t.currencies?.symbol || ""}
+                  </span>
+                )}
                 {t.xp_reward > 0 && <span className="text-[10px] text-primary">+{t.xp_reward} XP</span>}
                 {t.is_required && <Badge className="bg-primary/10 text-primary text-[9px] border-0">Req</Badge>}
               </div>

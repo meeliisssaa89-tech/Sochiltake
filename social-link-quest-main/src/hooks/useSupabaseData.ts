@@ -467,3 +467,113 @@ export function useBroadcast() {
     }) => invokeFunction("broadcast-message", payload),
   });
 }
+
+export function usePromoCodes() {
+  return useQuery({
+    queryKey: ["promo-codes"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("promo_codes" as any)
+        .select("*, currencies:reward_currency_id(symbol, name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+}
+
+export function useCreatePromoCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      code: string;
+      reward_amount: number;
+      reward_currency_id: string | null;
+      xp_reward: number;
+      max_uses: number;
+      is_active: boolean;
+      expires_at: string | null;
+    }) => {
+      const { error } = await supabase.from("promo_codes" as any).insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["promo-codes"] }),
+  });
+}
+
+export function useDeletePromoCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("promo_codes" as any).delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["promo-codes"] }),
+  });
+}
+
+export function useTogglePromoCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase.from("promo_codes" as any).update({ is_active }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["promo-codes"] }),
+  });
+}
+
+export function useRedeemPromoCode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, code }: { userId: string; code: string }) => {
+      const { data: promo, error: promoErr } = await supabase
+        .from("promo_codes" as any)
+        .select("*")
+        .eq("code", code)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (promoErr || !promo) throw new Error("Invalid or inactive promo code");
+
+      const p = promo as any;
+      if (p.expires_at && new Date(p.expires_at) < new Date()) throw new Error("Promo code has expired");
+      if (p.max_uses > 0 && p.used_count >= p.max_uses) throw new Error("Promo code has reached its usage limit");
+
+      const { data: existing } = await supabase
+        .from("promo_redemptions" as any)
+        .select("id")
+        .eq("promo_id", p.id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (existing) throw new Error("You have already used this promo code");
+
+      const { error: redErr } = await supabase.from("promo_redemptions" as any).insert({ promo_id: p.id, user_id: userId });
+      if (redErr) throw new Error(redErr.message);
+
+      await supabase.from("promo_codes" as any).update({ used_count: p.used_count + 1 }).eq("id", p.id);
+
+      if (p.reward_amount > 0 && p.reward_currency_id) {
+        const { data: bal } = await supabase.from("balances").select("id, amount").eq("user_id", userId).eq("currency_id", p.reward_currency_id).maybeSingle();
+        if (bal) {
+          await supabase.from("balances").update({ amount: Number(bal.amount) + p.reward_amount }).eq("id", bal.id);
+        } else {
+          await supabase.from("balances").insert({ user_id: userId, currency_id: p.reward_currency_id, amount: p.reward_amount });
+        }
+      }
+
+      if (p.xp_reward > 0) {
+        const { data: u } = await supabase.from("users").select("exp").eq("telegram_id", userId).maybeSingle();
+        if (u) {
+          const newExp = (u.exp || 0) + p.xp_reward;
+          await supabase.from("users").update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 }).eq("telegram_id", userId);
+        }
+      }
+
+      return { reward: p.reward_amount, xp: p.xp_reward, message: `+${p.reward_amount} • +${p.xp_reward} XP` };
+    },
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["balances", v.userId] });
+      qc.invalidateQueries({ queryKey: ["promo-codes"] });
+    },
+  });
+}
