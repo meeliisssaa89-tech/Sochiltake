@@ -36,10 +36,25 @@ export function HomePage() {
     ?? 0;
   const mainSymbol = balances.find((b) => b.currencies?.symbol !== "USDT")?.currencies?.symbol || "TON";
 
+  const tonCurrency = balances.find((b) => b.currencies?.symbol !== "USDT")?.currencies;
+  const usdtCurrency = balances.find((b) => b.currencies?.symbol === "USDT")?.currencies;
+
   const stats = [
-    { icon: CheckCircle2, label: t("completedTasks"), value: String(completedCount), color: "text-primary" },
-    { icon: Coins, label: t("totalCoins"), value: `${tonBalance.toLocaleString()} ${mainSymbol}`, color: "text-accent" },
-    { icon: DollarSign, label: t("usdtBalance"), value: `$${usdtBalance.toFixed(2)}`, color: "text-success" },
+    { iconEl: <CheckCircle2 className="w-5 h-5 mx-auto mb-1 text-primary" />, label: t("completedTasks"), value: String(completedCount) },
+    {
+      iconEl: tonCurrency?.icon_url
+        ? <img src={tonCurrency.icon_url} alt={mainSymbol} className="w-5 h-5 mx-auto mb-1 rounded-full" />
+        : <Coins className="w-5 h-5 mx-auto mb-1 text-accent" />,
+      label: t("totalCoins"),
+      value: `${tonBalance.toLocaleString()} ${mainSymbol}`,
+    },
+    {
+      iconEl: usdtCurrency?.icon_url
+        ? <img src={usdtCurrency.icon_url} alt="USDT" className="w-5 h-5 mx-auto mb-1 rounded-full" />
+        : <DollarSign className="w-5 h-5 mx-auto mb-1 text-success" />,
+      label: t("usdtBalance"),
+      value: `$${usdtBalance.toFixed(2)}`,
+    },
   ];
 
   const handleCheckin = async () => {
@@ -86,7 +101,7 @@ export function HomePage() {
         {stats.map((stat, i) => (
           <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 * (i + 1) }} className="glass-card rounded-xl p-3 text-center">
-            <stat.icon className={`w-5 h-5 mx-auto mb-1 ${stat.color}`} />
+            {stat.iconEl}
             <p className="text-sm font-bold tabular-nums truncate">{stat.value}</p>
             <p className="text-[10px] text-muted-foreground">{stat.label}</p>
           </motion.div>

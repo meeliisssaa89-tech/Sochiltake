@@ -178,7 +178,8 @@ export function AdminAdsView() {
                         <Input value={cfg.block_id} onChange={(e) => updatePlatform(key, "block_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. int-26108" />
                       </div>
                       <p className="text-[9px] text-muted-foreground/70 bg-secondary/60 rounded p-1.5">
-                        The Adsgram SDK (<code>sad.adsgram.ai/js/sad.min.js</code>) is injected automatically when Block ID is set. No need to add any script manually.
+                        The Adsgram SDK is injected automatically. <strong className="text-yellow-500">Important:</strong> Your Block ID must be registered in Adsgram's dashboard with this exact app URL:{" "}
+                        <code className="text-[8px] break-all">{window.location.origin}</code>. If URLs don't match, Adsgram will show an error dialog before falling through to Monetag.
                       </p>
                     </div>
                   )}

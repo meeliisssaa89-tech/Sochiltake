@@ -110,19 +110,15 @@ Deno.serve(async (req) => {
         .select('amount')
         .eq('user_id', userId)
         .eq('currency_id', currencyId)
-        .single();
+        .maybeSingle();
 
-      if (balance) {
-        await supabase
-          .from('balances')
-          .update({ amount: balance.amount + rewardAmount })
-          .eq('user_id', userId)
-          .eq('currency_id', currencyId);
-      } else {
-        await supabase
-          .from('balances')
-          .insert({ user_id: userId, currency_id: currencyId, amount: rewardAmount });
-      }
+      const newAmount = Number(balance?.amount || 0) + Number(rewardAmount);
+      await supabase
+        .from('balances')
+        .upsert(
+          { user_id: userId, currency_id: currencyId, amount: newAmount },
+          { onConflict: 'user_id,currency_id' }
+        );
     }
 
     // Grant XP

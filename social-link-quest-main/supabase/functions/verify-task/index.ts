@@ -278,19 +278,15 @@ async function completeTask(supabase: any, userId: string, task: any, existingTa
       .select('amount')
       .eq('user_id', userId)
       .eq('currency_id', task.reward_currency_id)
-      .single();
+      .maybeSingle();
 
-    if (balance) {
-      await supabase
-        .from('balances')
-        .update({ amount: balance.amount + task.reward_amount })
-        .eq('user_id', userId)
-        .eq('currency_id', task.reward_currency_id);
-    } else {
-      await supabase
-        .from('balances')
-        .insert({ user_id: userId, currency_id: task.reward_currency_id, amount: task.reward_amount });
-    }
+    const newAmount = Number(balance?.amount || 0) + Number(task.reward_amount);
+    await supabase
+      .from('balances')
+      .upsert(
+        { user_id: userId, currency_id: task.reward_currency_id, amount: newAmount },
+        { onConflict: 'user_id,currency_id' }
+      );
   }
 
   // Grant XP

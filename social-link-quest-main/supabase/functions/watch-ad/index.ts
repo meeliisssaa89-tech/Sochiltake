@@ -90,17 +90,13 @@ Deno.serve(async (req) => {
         .eq('currency_id', currencyId)
         .maybeSingle();
 
-      if (bal) {
-        await supabase
-          .from('balances')
-          .update({ amount: Number(bal.amount) + Number(ads.reward_per_ad) })
-          .eq('user_id', userId)
-          .eq('currency_id', currencyId);
-      } else {
-        await supabase
-          .from('balances')
-          .insert({ user_id: userId, currency_id: currencyId, amount: Number(ads.reward_per_ad) });
-      }
+      const newAmount = Number(bal?.amount || 0) + Number(ads.reward_per_ad);
+      await supabase
+        .from('balances')
+        .upsert(
+          { user_id: userId, currency_id: currencyId, amount: newAmount },
+          { onConflict: 'user_id,currency_id' }
+        );
     }
 
     // Add XP
