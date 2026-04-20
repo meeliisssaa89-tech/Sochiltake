@@ -16,6 +16,7 @@ interface PlatformConfig {
   block_id: string;
   zone_id: string;
   sdk_html: string;
+  debug?: boolean;
 }
 
 interface AdsBindings {
@@ -41,7 +42,7 @@ export function useAdTrigger() {
 
   const getPlatform = (slot: AdSlot): string => (bindings as any)[slot] || "none";
 
-  const triggerAdgram = async (blockId: string): Promise<boolean> => {
+  const triggerAdgram = async (blockId: string, debug = false): Promise<boolean> => {
     if (!blockId) return false;
     const sdk = window.Adsgram;
     if (!sdk) {
@@ -49,7 +50,7 @@ export function useAdTrigger() {
       return false;
     }
     try {
-      const controller = sdk.init({ blockId });
+      const controller = sdk.init({ blockId, debug });
       const result = await controller.show();
       return result?.done !== false;
     } catch (err) {
@@ -120,8 +121,8 @@ export function useAdTrigger() {
     if (platform === "adgram" || platform === "all") {
       const cfg = platforms.adgram;
       if (cfg?.enabled && cfg.block_id) {
-        console.log("[Ads] Triggering Adgram...");
-        const ok = await triggerAdgram(cfg.block_id);
+        console.log("[Ads] Triggering Adgram...", cfg.debug ? "(debug mode)" : "");
+        const ok = await triggerAdgram(cfg.block_id, cfg.debug || false);
         if (ok) {
           anySucceeded = true;
           console.log("[Ads] Adgram completed successfully");

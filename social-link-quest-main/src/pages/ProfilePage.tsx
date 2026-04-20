@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Languages, Wallet, ArrowUpRight, Copy, Loader2, X, ChevronDown } from "lucide-react";
+import { Languages, ArrowUpRight, Loader2, X, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Token {
@@ -48,13 +48,8 @@ export function ProfilePage() {
     return sum + Number(b.amount) * Number(b.currencies.exchange_rate || 0);
   }, 0);
 
-  const walletAddress = `0x${(user?.telegram_id || "").padStart(40, "0").slice(-40)}`;
-  const shortAddr = `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-
-  const copyAddr = () => {
-    navigator.clipboard.writeText(walletAddress);
-    toast({ title: t("copied") });
-  };
+  const TON_ICON = "https://ton.org/icons/ton_symbol.svg";
+  const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
 
   const selectedBalance = balances.find((b) => b.id === selectedBalanceId) || balances[0];
 
@@ -130,9 +125,6 @@ export function ProfilePage() {
             <div>
               <p className="text-xs text-muted-foreground">{t("totalBalance")}</p>
               <p className="text-3xl font-bold tabular-nums mt-1">${totalUsd.toFixed(2)}</p>
-              <button onClick={copyAddr} className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1 hover:text-foreground transition-colors">
-                <Wallet className="w-3 h-3" /> {shortAddr} <Copy className="w-2.5 h-2.5" />
-              </button>
             </div>
             <Avatar className="h-12 w-12 border-2 border-primary/30">
               <AvatarImage src={user?.photo_url} />
@@ -254,10 +246,11 @@ export function ProfilePage() {
             if (!b.currencies) return null;
             const cur = b.currencies as any;
             const usdValue = cur.symbol === "USDT" ? Number(b.amount) : Number(b.amount) * Number(cur.exchange_rate || 0);
+            const iconUrl = cur.icon_url || (cur.symbol === "TON" ? TON_ICON : cur.symbol === "USDT" ? USDT_ICON : null);
             return (
               <div key={b.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
-                {cur.icon_url ? (
-                  <img src={cur.icon_url} alt={cur.symbol} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                {iconUrl ? (
+                  <img src={iconUrl} alt={cur.symbol} className="w-9 h-9 rounded-full object-contain shrink-0 bg-secondary p-0.5" />
                 ) : (
                   <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-xs font-bold shrink-0">
                     {cur.symbol[0]}

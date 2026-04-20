@@ -38,21 +38,30 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Determine reward currency — try configured symbol first, then fall back to first active currency
-    const symbol = settings.reward_currency_symbol;
+    // Determine reward currency — try configured symbol first, then TON, then first active
+    const symbol = settings.reward_currency_symbol || 'TON';
     let currencyId: string | null = null;
 
-    if (symbol) {
-      const { data: cur } = await supabase
+    const { data: cur } = await supabase
+      .from('currencies')
+      .select('id')
+      .eq('symbol', symbol)
+      .eq('is_active', true)
+      .maybeSingle();
+    currencyId = cur?.id || null;
+
+    // Fallback: use TON if configured symbol not found
+    if (!currencyId && symbol !== 'TON') {
+      const { data: tonCur } = await supabase
         .from('currencies')
         .select('id')
-        .eq('symbol', symbol)
+        .eq('symbol', 'TON')
         .eq('is_active', true)
         .maybeSingle();
-      currencyId = cur?.id || null;
+      currencyId = tonCur?.id || null;
     }
 
-    // Fallback: use the first active currency if specific one not found
+    // Final fallback: first active currency
     if (!currencyId) {
       const { data: firstCur } = await supabase
         .from('currencies')

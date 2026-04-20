@@ -50,11 +50,16 @@ Deno.serve(async (req) => {
       if (r <= 0) { chosen = p; break; }
     }
 
-    // Resolve currency: if prize has currency_id, use it, else use Points
+    // Resolve currency: if prize has currency_id, use it, else use TON
     let currencyId = chosen.currency_id;
     if (!currencyId) {
-      const { data: cur } = await supabase.from('currencies').select('id').eq('symbol', 'PTS').maybeSingle();
-      currencyId = cur?.id;
+      const { data: tonCur } = await supabase.from('currencies').select('id').eq('symbol', 'TON').eq('is_active', true).maybeSingle();
+      currencyId = tonCur?.id;
+      // Fallback to first active currency
+      if (!currencyId) {
+        const { data: fallbackCur } = await supabase.from('currencies').select('id').eq('is_active', true).order('id', { ascending: true }).limit(1).maybeSingle();
+        currencyId = fallbackCur?.id;
+      }
     }
 
     // Credit balance

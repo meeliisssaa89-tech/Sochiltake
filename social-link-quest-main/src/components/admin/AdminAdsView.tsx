@@ -13,6 +13,7 @@ interface PlatformConfig {
   block_id: string;
   zone_id: string;
   sdk_html: string;
+  debug?: boolean;
 }
 
 interface AdsConfig {
@@ -31,7 +32,7 @@ interface ButtonBindings {
   promo_redeem: string;
 }
 
-const defaultPlatform: PlatformConfig = { enabled: false, block_id: "", zone_id: "", sdk_html: "" };
+const defaultPlatform: PlatformConfig = { enabled: false, block_id: "", zone_id: "", sdk_html: "", debug: false };
 
 const PLATFORMS = [
   { key: "adgram", label: "Adgram", desc: "Telegram-native ad network", color: "text-blue-400" },
@@ -177,9 +178,16 @@ export function AdminAdsView() {
                         <label className="text-[10px] text-muted-foreground">Block ID</label>
                         <Input value={cfg.block_id} onChange={(e) => updatePlatform(key, "block_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. int-26108" />
                       </div>
+                      <div className="flex items-center justify-between bg-yellow-500/10 border border-yellow-500/30 rounded p-2">
+                        <div>
+                          <p className="text-[10px] text-yellow-500 font-medium">Debug Mode (Test Ads)</p>
+                          <p className="text-[9px] text-muted-foreground">Enable to bypass URL validation. Use when testing. Disable in production.</p>
+                        </div>
+                        <Switch checked={cfg.debug || false} onCheckedChange={(v) => updatePlatform(key, "debug", v)} />
+                      </div>
                       <p className="text-[9px] text-muted-foreground/70 bg-secondary/60 rounded p-1.5">
-                        The Adsgram SDK is injected automatically. <strong className="text-yellow-500">Important:</strong> Your Block ID must be registered in Adsgram's dashboard with this exact app URL:{" "}
-                        <code className="text-[8px] break-all">{window.location.origin}</code>. If URLs don't match, Adsgram will show an error dialog before falling through to Monetag.
+                        For production: register this URL in Adsgram's dashboard:{" "}
+                        <code className="text-[8px] break-all text-primary">{window.location.origin}</code>
                       </p>
                     </div>
                   )}

@@ -72,15 +72,26 @@ Deno.serve(async (req) => {
     const rewardTable: Record<number, number> = { 1: 50, 2: 100, 3: 150, 4: 200, 5: 250, 6: 300, 7: 500 };
     const rewardAmount = rewardTable[streakDay] || 50;
 
-    // Get default currency (FG Coins - first active currency)
-    const { data: currencies } = await supabase
+    // Get TON currency
+    const { data: tonCur } = await supabase
       .from('currencies')
       .select('id')
+      .eq('symbol', 'TON')
       .eq('is_active', true)
-      .order('created_at', { ascending: true })
-      .limit(1);
+      .maybeSingle();
 
-    const currencyId = currencies?.[0]?.id || null;
+    // Fallback to first active currency if TON not found
+    let currencyId = tonCur?.id || null;
+    if (!currencyId) {
+      const { data: fallbackCur } = await supabase
+        .from('currencies')
+        .select('id')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      currencyId = fallbackCur?.id || null;
+    }
 
     // Insert checkin record
     const { data: checkin, error: checkinError } = await supabase

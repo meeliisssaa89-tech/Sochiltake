@@ -12,7 +12,7 @@ import { DailyAdsCard } from "@/components/DailyAdsCard";
 import { SpinWheel } from "@/components/SpinWheel";
 import { hapticImpact, hapticNotification } from "@/lib/telegram";
 import {
-  CheckCircle2, Coins, DollarSign, Calendar, BookOpen, ChevronRight, Flame, Star, Loader2,
+  CheckCircle2, Calendar, BookOpen, ChevronRight, Flame, Star, Loader2,
 } from "lucide-react";
 
 export function HomePage() {
@@ -31,29 +31,25 @@ export function HomePage() {
 
   const completedCount = userTasks?.filter((ut) => ut.status === "completed").length || 0;
   const usdtBalance = balances.find((b) => b.currencies?.symbol === "USDT")?.amount || 0;
-  const tonBalance = balances.find((b) => b.currencies?.symbol === "TON")?.amount
-    ?? balances.find((b) => b.currencies?.symbol !== "USDT")?.amount
-    ?? 0;
-  const mainSymbol = balances.find((b) => b.currencies?.symbol !== "USDT")?.currencies?.symbol || "TON";
+  const tonBalance = balances.find((b) => b.currencies?.symbol === "TON")?.amount || 0;
 
-  const tonCurrency = balances.find((b) => b.currencies?.symbol !== "USDT")?.currencies;
+  const tonCurrency = balances.find((b) => b.currencies?.symbol === "TON")?.currencies;
   const usdtCurrency = balances.find((b) => b.currencies?.symbol === "USDT")?.currencies;
+
+  const TON_ICON = "https://ton.org/icons/ton_symbol.svg";
+  const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
 
   const stats = [
     { iconEl: <CheckCircle2 className="w-5 h-5 mx-auto mb-1 text-primary" />, label: t("completedTasks"), value: String(completedCount) },
     {
-      iconEl: tonCurrency?.icon_url
-        ? <img src={tonCurrency.icon_url} alt={mainSymbol} className="w-5 h-5 mx-auto mb-1 rounded-full" />
-        : <Coins className="w-5 h-5 mx-auto mb-1 text-accent" />,
+      iconEl: <img src={tonCurrency?.icon_url || TON_ICON} alt="TON" className="w-5 h-5 mx-auto mb-1 rounded-full object-contain" />,
       label: t("totalCoins"),
-      value: `${tonBalance.toLocaleString()} ${mainSymbol}`,
+      value: `${Number(tonBalance).toLocaleString()} TON`,
     },
     {
-      iconEl: usdtCurrency?.icon_url
-        ? <img src={usdtCurrency.icon_url} alt="USDT" className="w-5 h-5 mx-auto mb-1 rounded-full" />
-        : <DollarSign className="w-5 h-5 mx-auto mb-1 text-success" />,
+      iconEl: <img src={usdtCurrency?.icon_url || USDT_ICON} alt="USDT" className="w-5 h-5 mx-auto mb-1 rounded-full object-contain" />,
       label: t("usdtBalance"),
-      value: `$${usdtBalance.toFixed(2)}`,
+      value: `$${Number(usdtBalance).toFixed(2)}`,
     },
   ];
 
@@ -63,7 +59,7 @@ export function HomePage() {
     try {
       const result = await checkinMutation.mutateAsync(userId);
       hapticNotification("success");
-      toast({ title: t("success"), description: `+${result.reward} ${mainSymbol}, +${result.xpReward} XP (${result.streak} ${t("streak")})` });
+      toast({ title: t("success"), description: `+${result.reward} TON, +${result.xpReward} XP (${result.streak} ${t("streak")})` });
     } catch (err: any) {
       hapticNotification("error");
       toast({ title: t("error"), description: err.message, variant: "destructive" });
@@ -171,8 +167,8 @@ export function HomePage() {
               const done = completedTaskIds.has(task.id);
               const title = language === "ar" && task.title_ar ? task.title_ar : task.title_en;
               const taskCur = (task as any).currencies;
-              const taskSym = taskCur?.symbol || mainSymbol;
-              const taskIcon = taskCur?.icon_url;
+              const taskSym = taskCur?.symbol || "TON";
+              const taskIcon = taskCur?.icon_url || (taskSym === "TON" ? TON_ICON : taskSym === "USDT" ? USDT_ICON : null);
               return (
                 <div key={task.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${done ? "bg-success/10" : "bg-accent/10"}`}>
