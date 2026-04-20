@@ -1,27 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Eye, Loader2, Coins, Play } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useAppSettings, useAdsToday, useWatchAd } from "@/hooks/useSupabaseData";
+import { useAdsToday, useWatchAd, useCurrencies } from "@/hooks/useSupabaseData";
+import { useAdTrigger } from "@/hooks/useAdTrigger";
 import { hapticImpact, hapticNotification } from "@/lib/telegram";
-
-interface AdsConfig {
-  daily_count: number;
-  reward_per_ad: number;
-  xp_per_ad: number;
-  duration_seconds: number;
-  enabled: boolean;
-}
-
-declare global {
-  interface Window {
-    show_ad?: (zoneId?: string) => Promise<void>;
-    [k: string]: any;
-  }
-}
 
 export function DailyAdsCard() {
   const { t } = useLanguage();
@@ -29,92 +15,48 @@ export function DailyAdsCard() {
   const { toast } = useToast();
   const userId = user?.telegram_id;
 
-  const { data: settings } = useAppSettings();
-  const adsConfig: AdsConfig = settings?.ads_daily || {
-    daily_count: 10,
-    reward_per_ad: 10,
-    xp_per_ad: 5,
-    duration_seconds: 15,
-    enabled: true,
-  };
-  const adZone = (settings?.ads_zones as any)?.daily_ad_zone || "";
-  const currencySymbol = (settings?.reward_currency_symbol as string) || "PTS";
-
+  const { triggerAd, isConfigured, adsConfig } = useAdTrigger();
+  const { data: currencies } = useCurrencies();
   const { data: watchedToday = [] } = useAdsToday(userId);
   const watchMutation = useWatchAd();
 
   const [watching, setWatching] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const timerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
-    };
-  }, []);
 
   if (!adsConfig.enabled) return null;
 
-  const watchedCount = watchedToday.length;
+  const watchedCount = (watchedToday as any[]).length;
   const remaining = Math.max(0, adsConfig.daily_count - watchedCount);
   const allDone = remaining === 0;
 
-  /**
-   * Smart ad trigger:
-   * 1. If adZone is set and matches a function name on window → call window[adZone]()
-   * 2. Else if window.show_ad is available → call window.show_ad(adZone || undefined)
-   * 3. Else fall back to countdown timer
-   */
-  const triggerSdkAd = async (): Promise<boolean> => {
-    // Try calling adZone directly as a function name (e.g. "show_12345" → window.show_12345())
-    if (adZone && typeof window[adZone] === "function") {
-      try {
-        await window[adZone]();
-        return true;
-      } catch (e) {
-        console.warn("Ad zone function failed:", adZone, e);
-      }
-    }
-
-    // Fallback: call generic show_ad with the zone as param
-    if (typeof window.show_ad === "function") {
-      try {
-        await window.show_ad(adZone || undefined);
-        return true;
-      } catch (e) {
-        console.warn("show_ad failed:", e);
-      }
-    }
-
-    return false;
+  const getCurrencySymbol = () => {
+    const sym = adsConfig.reward_currency_symbol;
+    if (sym) return sym;
+    if (currencies && currencies.length > 0) return currencies[0].symbol;
+    return "TON";
   };
+  const currencySymbol = getCurrencySymbol();
 
   const handleWatch = async () => {
     if (!userId || allDone || watching) return;
     hapticImpact("medium");
     setWatching(true);
 
-    // Try SDK ad first
-    const sdkOk = await triggerSdkAd();
-
-    // Fall back to internal countdown timer if no SDK or it failed
-    if (!sdkOk) {
-      setCountdown(adsConfig.duration_seconds);
-      await new Promise<void>((resolve) => {
-        timerRef.current = window.setInterval(() => {
-          setCountdown((c) => {
-            if (c <= 1) {
-              if (timerRef.current) window.clearInterval(timerRef.current);
-              resolve();
-              return 0;
-            }
-            return c - 1;
-          });
-        }, 1000);
-      });
-    }
-
     try {
+      if (isConfigured("daily_ads")) {
+        await triggerAd("daily_ads");
+      } else {
+        setCountdown(adsConfig.duration_seconds || 15);
+        await new Promise<void>((resolve) => {
+          const iv = window.setInterval(() => {
+            setCountdown((c) => {
+              if (c <= 1) { window.clearInterval(iv); resolve(); return 0; }
+              return c - 1;
+            });
+          }, 1000);
+        });
+      }
+
       const slotIndex = watchedCount;
       const result = await watchMutation.mutateAsync({ userId, slotIndex });
       hapticNotification("success");
@@ -176,9 +118,9 @@ export function DailyAdsCard() {
 
       <div
         className="grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${Math.min(adsConfig.daily_count, 10)}, minmax(0,1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${Math.min(adsConfig.daily_count || 10, 10)}, minmax(0,1fr))` }}
       >
-        {Array.from({ length: adsConfig.daily_count }).map((_, i) => {
+        {Array.from({ length: adsConfig.daily_count || 10 }).map((_, i) => {
           const done = i < watchedCount;
           const next = i === watchedCount;
           return (
@@ -192,7 +134,7 @@ export function DailyAdsCard() {
         })}
       </div>
       <p className="text-[10px] text-muted-foreground mt-2 text-center">
-        {watchedCount}/{adsConfig.daily_count} · {t("nextReset")}
+        {watchedCount}/{adsConfig.daily_count || 10} · {t("nextReset")}
       </p>
     </motion.div>
   );

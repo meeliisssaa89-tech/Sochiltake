@@ -76,7 +76,7 @@ export function AdminSpinView() {
 
       <div className="glass-card rounded-xl p-3 space-y-2">
         <h3 className="text-sm font-semibold">Add Prize</h3>
-        <Input placeholder="Label (e.g. 100 PTS)" value={newPrize.label} onChange={(e) => setNewPrize({ ...newPrize, label: e.target.value })} className="h-8 text-xs" />
+        <Input placeholder="Label (e.g. 100 TON)" value={newPrize.label} onChange={(e) => setNewPrize({ ...newPrize, label: e.target.value })} className="h-8 text-xs" />
         <Input placeholder="Image URL (optional)" value={newPrize.image_url} onChange={(e) => setNewPrize({ ...newPrize, image_url: e.target.value })} className="h-8 text-xs" />
         <div className="grid grid-cols-3 gap-2">
           <div>
@@ -114,7 +114,7 @@ export function AdminSpinView() {
             {p.image_url ? <img src={p.image_url} className="w-8 h-8 rounded" alt="" /> : <div className="w-8 h-8 rounded bg-accent/20 flex items-center justify-center"><Sparkles className="w-4 h-4 text-accent" /></div>}
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold truncate">{p.label}</p>
-              <p className="text-[10px] text-muted-foreground">{p.amount} {p.currencies?.symbol || "PTS"} • w:{p.weight} • +{p.xp_reward}xp</p>
+              <p className="text-[10px] text-muted-foreground">{p.amount} {p.currencies?.symbol || ""} • w:{p.weight} • +{p.xp_reward}xp</p>
             </div>
             <Switch checked={p.is_active} onCheckedChange={() => toggle(p.id, p.is_active)} />
             <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => delPrize(p.id)}>

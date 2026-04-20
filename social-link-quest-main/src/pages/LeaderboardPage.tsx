@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
 import { useLeaderboard, usePlatformStats, useReferrals, useUserTasks, useRedeemPromoCode } from "@/hooks/useSupabaseData";
+import { useAdTrigger } from "@/hooks/useAdTrigger";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,8 @@ export function LeaderboardPage() {
   const [rankType, setRankType] = useState<"tasks" | "referrals">("tasks");
   const [promoCode, setPromoCode] = useState("");
   const redeemPromo = useRedeemPromoCode();
+  const { triggerAd, isConfigured } = useAdTrigger();
+  const promoNeedsAd = isConfigured("promo_redeem");
 
   const { data: leaderboard, isLoading } = useLeaderboard(rankType);
   const { data: stats } = usePlatformStats();
@@ -45,6 +48,9 @@ export function LeaderboardPage() {
   const handleRedeem = async () => {
     if (!user?.telegram_id || !promoCode.trim()) return;
     try {
+      if (promoNeedsAd) {
+        await triggerAd("promo_redeem");
+      }
       const result = await redeemPromo.mutateAsync({ userId: user.telegram_id, code: promoCode.trim().toUpperCase() });
       toast({
         title: t("success"),

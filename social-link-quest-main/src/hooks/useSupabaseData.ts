@@ -529,11 +529,12 @@ export function useRedeemPromoCode() {
     mutationFn: async ({ userId, code }: { userId: string; code: string }) => {
       const { data: promo, error: promoErr } = await supabase
         .from("promo_codes" as any)
-        .select("*")
+        .select("*, currencies:reward_currency_id(symbol)")
         .eq("code", code)
         .eq("is_active", true)
         .maybeSingle();
-      if (promoErr || !promo) throw new Error("Invalid or inactive promo code");
+      if (promoErr) throw new Error(promoErr.message);
+      if (!promo) throw new Error("Invalid or inactive promo code");
 
       const p = promo as any;
       if (p.expires_at && new Date(p.expires_at) < new Date()) throw new Error("Promo code has expired");
@@ -547,33 +548,63 @@ export function useRedeemPromoCode() {
         .maybeSingle();
       if (existing) throw new Error("You have already used this promo code");
 
-      const { error: redErr } = await supabase.from("promo_redemptions" as any).insert({ promo_id: p.id, user_id: userId });
+      const { error: redErr } = await supabase
+        .from("promo_redemptions" as any)
+        .insert({ promo_id: p.id, user_id: userId });
       if (redErr) throw new Error(redErr.message);
 
-      await supabase.from("promo_codes" as any).update({ used_count: p.used_count + 1 }).eq("id", p.id);
+      const { error: countErr } = await supabase
+        .from("promo_codes" as any)
+        .update({ used_count: p.used_count + 1 })
+        .eq("id", p.id);
+      if (countErr) console.warn("[promo] count update failed:", countErr.message);
 
       if (p.reward_amount > 0 && p.reward_currency_id) {
-        const { data: bal } = await supabase.from("balances").select("id, amount").eq("user_id", userId).eq("currency_id", p.reward_currency_id).maybeSingle();
+        const { data: bal, error: balFetchErr } = await supabase
+          .from("balances")
+          .select("id, amount")
+          .eq("user_id", userId)
+          .eq("currency_id", p.reward_currency_id)
+          .maybeSingle();
+        if (balFetchErr) console.warn("[promo] balance fetch failed:", balFetchErr.message);
+
         if (bal) {
-          await supabase.from("balances").update({ amount: Number(bal.amount) + p.reward_amount }).eq("id", bal.id);
+          const { error: balUpdErr } = await supabase
+            .from("balances")
+            .update({ amount: Number(bal.amount) + Number(p.reward_amount) })
+            .eq("id", (bal as any).id);
+          if (balUpdErr) throw new Error("Failed to update balance: " + balUpdErr.message);
         } else {
-          await supabase.from("balances").insert({ user_id: userId, currency_id: p.reward_currency_id, amount: p.reward_amount });
+          const { error: balInsErr } = await supabase
+            .from("balances")
+            .insert({ user_id: userId, currency_id: p.reward_currency_id, amount: Number(p.reward_amount) });
+          if (balInsErr) throw new Error("Failed to add balance: " + balInsErr.message);
         }
       }
 
       if (p.xp_reward > 0) {
         const { data: u } = await supabase.from("users").select("exp").eq("telegram_id", userId).maybeSingle();
         if (u) {
-          const newExp = (u.exp || 0) + p.xp_reward;
-          await supabase.from("users").update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 }).eq("telegram_id", userId);
+          const newExp = ((u as any).exp || 0) + p.xp_reward;
+          await supabase
+            .from("users")
+            .update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 })
+            .eq("telegram_id", userId);
         }
       }
 
-      return { reward: p.reward_amount, xp: p.xp_reward, message: `+${p.reward_amount} • +${p.xp_reward} XP` };
+      const sym = p.currencies?.symbol || "";
+      return {
+        reward: p.reward_amount,
+        xp: p.xp_reward,
+        symbol: sym,
+        message: `+${p.reward_amount}${sym ? " " + sym : ""} • +${p.xp_reward} XP`,
+      };
     },
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["balances", v.userId] });
       qc.invalidateQueries({ queryKey: ["promo-codes"] });
+      qc.invalidateQueries({ queryKey: ["user", v.userId] });
     },
   });
 }

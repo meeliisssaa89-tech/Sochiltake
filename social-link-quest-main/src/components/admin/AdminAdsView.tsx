@@ -27,6 +27,8 @@ interface ButtonBindings {
   daily_ads: string;
   tasks_page: string;
   home_checkin: string;
+  spin_button: string;
+  promo_redeem: string;
 }
 
 const defaultPlatform: PlatformConfig = { enabled: false, block_id: "", zone_id: "", sdk_html: "" };
@@ -38,9 +40,11 @@ const PLATFORMS = [
 ];
 
 const BUTTON_SLOTS = [
-  { key: "daily_ads", label: "Daily Ads Card (Watch button)" },
-  { key: "tasks_page", label: "Tasks Page ad button" },
-  { key: "home_checkin", label: "Home Page (extra button)" },
+  { key: "daily_ads", label: "Daily Ads Card — Watch button" },
+  { key: "tasks_page", label: "Tasks Page — ad button" },
+  { key: "home_checkin", label: "Home Page — check-in bonus button" },
+  { key: "spin_button", label: "Spin Wheel — show ad before spin" },
+  { key: "promo_redeem", label: "Promo Code — show ad before redeem" },
 ];
 
 export function AdminAdsView() {
@@ -63,9 +67,11 @@ export function AdminAdsView() {
   });
 
   const [bindings, setBindings] = useState<ButtonBindings>({
-    daily_ads: "custom",
-    tasks_page: "custom",
-    home_checkin: "custom",
+    daily_ads: "none",
+    tasks_page: "none",
+    home_checkin: "none",
+    spin_button: "none",
+    promo_redeem: "none",
   });
 
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -164,9 +170,14 @@ export function AdminAdsView() {
               {cfg.enabled && (
                 <>
                   {key === "adgram" && (
-                    <div>
-                      <label className="text-[10px] text-muted-foreground">Block ID</label>
-                      <Input value={cfg.block_id} onChange={(e) => updatePlatform(key, "block_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. 1234" />
+                    <div className="space-y-1.5">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Block ID</label>
+                        <Input value={cfg.block_id} onChange={(e) => updatePlatform(key, "block_id", e.target.value)} className="h-8 text-xs" placeholder="e.g. int-26108" />
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/70 bg-secondary/60 rounded p-1.5">
+                        The Adsgram SDK (<code>sad.adsgram.ai/js/sad.min.js</code>) is injected automatically when Block ID is set. No need to add any script manually.
+                      </p>
                     </div>
                   )}
                   {key === "montag" && (

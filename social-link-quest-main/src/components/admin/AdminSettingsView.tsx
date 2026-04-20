@@ -13,7 +13,7 @@ export function AdminSettingsView() {
 
   const [checkinDays, setCheckinDays] = useState<number[]>([50, 100, 150, 200, 250, 300, 500]);
   const [referral, setReferral] = useState({ amount: 100, xp: 50, text_en: "", text_ar: "" });
-  const [symbol, setSymbol] = useState("PTS");
+  const [symbol, setSymbol] = useState("TON");
   const [bot, setBot] = useState({ bot_username: "", bot_webapp_url: "" });
 
   useEffect(() => {

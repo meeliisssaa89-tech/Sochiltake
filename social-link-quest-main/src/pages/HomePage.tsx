@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
-import { useCheckinStatus, useDailyCheckin, useUserTasks, useTasks, useAppSettings } from "@/hooks/useSupabaseData";
+import { useCheckinStatus, useDailyCheckin, useUserTasks, useTasks } from "@/hooks/useSupabaseData";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,20 +24,21 @@ export function HomePage() {
   const { data: checkinData, isLoading: checkinLoading } = useCheckinStatus(userId);
   const { data: tasks, isLoading: tasksLoading } = useTasks();
   const { data: userTasks } = useUserTasks(userId);
-  const { data: settings } = useAppSettings();
   const checkinMutation = useDailyCheckin();
 
-  const symbol = (settings?.reward_currency_symbol as string) || "PTS";
   const expToNext = 5000;
   const expProgress = user ? ((user.exp % expToNext) / expToNext) * 100 : 0;
 
   const completedCount = userTasks?.filter((ut) => ut.status === "completed").length || 0;
-  const mainBalance = balances.find((b) => b.currencies?.symbol === symbol)?.amount || 0;
   const usdtBalance = balances.find((b) => b.currencies?.symbol === "USDT")?.amount || 0;
+  const tonBalance = balances.find((b) => b.currencies?.symbol === "TON")?.amount
+    ?? balances.find((b) => b.currencies?.symbol !== "USDT")?.amount
+    ?? 0;
+  const mainSymbol = balances.find((b) => b.currencies?.symbol !== "USDT")?.currencies?.symbol || "TON";
 
   const stats = [
     { icon: CheckCircle2, label: t("completedTasks"), value: String(completedCount), color: "text-primary" },
-    { icon: Coins, label: t("totalCoins"), value: `${mainBalance.toLocaleString()} ${symbol}`, color: "text-accent" },
+    { icon: Coins, label: t("totalCoins"), value: `${tonBalance.toLocaleString()} ${mainSymbol}`, color: "text-accent" },
     { icon: DollarSign, label: t("usdtBalance"), value: `$${usdtBalance.toFixed(2)}`, color: "text-success" },
   ];
 
@@ -47,7 +48,7 @@ export function HomePage() {
     try {
       const result = await checkinMutation.mutateAsync(userId);
       hapticNotification("success");
-      toast({ title: t("success"), description: `+${result.reward} ${symbol}, +${result.xpReward} XP (${result.streak} ${t("streak")})` });
+      toast({ title: t("success"), description: `+${result.reward} ${mainSymbol}, +${result.xpReward} XP (${result.streak} ${t("streak")})` });
     } catch (err: any) {
       hapticNotification("error");
       toast({ title: t("error"), description: err.message, variant: "destructive" });
@@ -155,7 +156,7 @@ export function HomePage() {
               const done = completedTaskIds.has(task.id);
               const title = language === "ar" && task.title_ar ? task.title_ar : task.title_en;
               const taskCur = (task as any).currencies;
-              const taskSym = taskCur?.symbol || symbol;
+              const taskSym = taskCur?.symbol || mainSymbol;
               const taskIcon = taskCur?.icon_url;
               return (
                 <div key={task.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
