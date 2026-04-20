@@ -441,13 +441,17 @@ export function useUpdateCurrency() {
 
 export function useUploadImage() {
   return useMutation({
-    mutationFn: async ({ file, path }: { file: File; path: string }) => {
-      const { data, error } = await supabase.storage
-        .from("app-images")
-        .upload(path, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
-      const { data: urlData } = supabase.storage.from("app-images").getPublicUrl(data.path);
-      return urlData.publicUrl;
+    mutationFn: async ({ file }: { file: File; path: string }) => {
+      return new Promise<string>((resolve, reject) => {
+        if (file.size > 2 * 1024 * 1024) {
+          reject(new Error("Image size must be less than 2 MB"));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
     },
   });
 }
