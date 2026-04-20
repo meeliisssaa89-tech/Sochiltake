@@ -1,0 +1,19 @@
+project_id = "aslufvkczridrdtlzdth"
+
+[functions.telegram-auth]
+verify_jwt = false
+
+[functions.telegram-webhook]
+verify_jwt = false
+
+[functions.daily-checkin]
+verify_jwt = false
+
+[functions.verify-task]
+verify_jwt = false
+
+[functions.watch-ad]
+verify_jwt = false
+
+[functions.broadcast-message]
+verify_jwt = false
