@@ -264,7 +264,7 @@ export function AdminAdsView() {
                         {(cfg.block_ids || []).length > 1 && (
                           <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
                             <p className="text-[9px] text-blue-400">
-                              <strong>How rotation works:</strong> Slot 1 → Block ID 1, Slot 2 → Block ID 2, Slot 3 → Block ID 1 (loops back), and so on. Each ad watch uses the next Block ID in order.
+                              <strong>كيف يعمل:</strong> عند الضغط على الزر يتم عرض <strong>جميع</strong> Block IDs بالتسلسل (الأول ثم الثاني ثم الثالث...) في نفس الجلسة قبل إعطاء المكافأة.
                             </p>
                           </div>
                         )}
