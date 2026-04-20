@@ -9,6 +9,7 @@ import { ActivityPage } from "@/pages/ActivityPage";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
+import { useAppSettings } from "@/hooks/useSupabaseData";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const pages: Record<string, React.ComponentType> = {
@@ -23,7 +24,11 @@ export default function Index() {
   const [activeTab, setActiveTab] = useState("home");
   const { dir } = useLanguage();
   const { isLoading } = useUser();
+  const { data: settings } = useAppSettings();
   const Page = pages[activeTab] || HomePage;
+
+  const logoUrl = settings?.app_logo_url;
+  const hasLogo = logoUrl && typeof logoUrl === "string" && logoUrl !== "null" && logoUrl.trim() !== "";
 
   if (isLoading) {
     return (
@@ -46,6 +51,15 @@ export default function Index() {
     <div className="min-h-screen bg-background" dir={dir}>
       <AdsSdkInjector />
       <div className="max-w-lg mx-auto">
+        {hasLogo && (
+          <div className="flex items-center justify-center pt-3 pb-1">
+            <img
+              src={logoUrl as string}
+              alt="App Logo"
+              className="h-9 max-w-[140px] object-contain"
+            />
+          </div>
+        )}
         <main className="px-4 pt-4 pb-20">
           <AnimatePresence mode="wait">
             <motion.div

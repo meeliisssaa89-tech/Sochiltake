@@ -304,6 +304,19 @@ export function useUpdateSetting() {
   });
 }
 
+export function useUploadImage() {
+  return useMutation({
+    mutationFn: async ({ file, path }: { file: File; path: string }) => {
+      const { data, error } = await supabase.storage
+        .from("app-images")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("app-images").getPublicUrl(data.path);
+      return urlData.publicUrl;
+    },
+  });
+}
+
 export function useBroadcast() {
   return useMutation({
     mutationFn: async (payload: {

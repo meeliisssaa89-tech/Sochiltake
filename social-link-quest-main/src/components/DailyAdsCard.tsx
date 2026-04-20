@@ -59,16 +59,33 @@ export function DailyAdsCard() {
   const remaining = Math.max(0, adsConfig.daily_count - watchedCount);
   const allDone = remaining === 0;
 
+  /**
+   * Smart ad trigger:
+   * 1. If adZone is set and matches a function name on window → call window[adZone]()
+   * 2. Else if window.show_ad is available → call window.show_ad(adZone || undefined)
+   * 3. Else fall back to countdown timer
+   */
   const triggerSdkAd = async (): Promise<boolean> => {
+    // Try calling adZone directly as a function name (e.g. "show_12345" → window.show_12345())
+    if (adZone && typeof window[adZone] === "function") {
+      try {
+        await window[adZone]();
+        return true;
+      } catch (e) {
+        console.warn("Ad zone function failed:", adZone, e);
+      }
+    }
+
+    // Fallback: call generic show_ad with the zone as param
     if (typeof window.show_ad === "function") {
       try {
         await window.show_ad(adZone || undefined);
         return true;
       } catch (e) {
-        console.warn("SDK ad failed", e);
-        return false;
+        console.warn("show_ad failed:", e);
       }
     }
+
     return false;
   };
 
@@ -157,8 +174,10 @@ export function DailyAdsCard() {
         </Button>
       </div>
 
-      {/* Slots — exactly like daily check-in but per ad */}
-      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.min(adsConfig.daily_count, 10)}, minmax(0,1fr))` }}>
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${Math.min(adsConfig.daily_count, 10)}, minmax(0,1fr))` }}
+      >
         {Array.from({ length: adsConfig.daily_count }).map((_, i) => {
           const done = i < watchedCount;
           const next = i === watchedCount;
