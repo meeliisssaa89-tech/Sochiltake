@@ -154,7 +154,9 @@ export function HomePage() {
             {requiredTasks.map((task) => {
               const done = completedTaskIds.has(task.id);
               const title = language === "ar" && task.title_ar ? task.title_ar : task.title_en;
-              const taskSym = (task as any).currencies?.symbol || symbol;
+              const taskCur = (task as any).currencies;
+              const taskSym = taskCur?.symbol || symbol;
+              const taskIcon = taskCur?.icon_url;
               return (
                 <div key={task.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${done ? "bg-success/10" : "bg-accent/10"}`}>
@@ -162,7 +164,12 @@ export function HomePage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{title}</p>
-                    <p className="text-[10px] text-accent">+{task.reward_amount} {taskSym} {task.xp_reward > 0 && `• +${task.xp_reward} XP`}</p>
+                    <p className="text-[10px] text-accent flex items-center gap-0.5">
+                      {taskIcon ? (
+                        <img src={taskIcon} alt={taskSym} className="w-3 h-3 rounded-full inline" />
+                      ) : null}
+                      +{task.reward_amount} {taskSym} {task.xp_reward > 0 && `• +${task.xp_reward} XP`}
+                    </p>
                   </div>
                 </div>
               );

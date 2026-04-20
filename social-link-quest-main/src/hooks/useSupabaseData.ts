@@ -34,7 +34,7 @@ export function useTasks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, currencies:reward_currency_id(symbol, name)")
+        .select("*, currencies:reward_currency_id(symbol, name, icon_url)")
         .eq("is_active", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
@@ -49,7 +49,7 @@ export function useAllTasks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, currencies:reward_currency_id(symbol, name)")
+        .select("*, currencies:reward_currency_id(symbol, name, icon_url)")
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return data || [];
@@ -301,6 +301,141 @@ export function useUpdateSetting() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["app-settings"] }),
+  });
+}
+
+export function useWithdrawals() {
+  return useQuery({
+    queryKey: ["withdrawals-admin"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("withdrawals")
+        .select("*, users:user_id(first_name, last_name, username, telegram_id), currencies:currency_id(symbol, name, icon_url)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+}
+
+export function useUserWithdrawals(userId: string | undefined) {
+  return useQuery({
+    queryKey: ["withdrawals-user", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from("withdrawals")
+        .select("*, currencies:currency_id(symbol, name, icon_url)")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useCreateWithdrawal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      currencyId,
+      amount,
+      walletAddress,
+      balanceId,
+    }: {
+      userId: string;
+      currencyId: string;
+      amount: number;
+      walletAddress: string;
+      balanceId: string;
+    }) => {
+      // Deduct from balance first
+      const { data: bal, error: balErr } = await supabase
+        .from("balances")
+        .select("amount")
+        .eq("id", balanceId)
+        .single();
+      if (balErr) throw balErr;
+      if (Number(bal.amount) < amount) throw new Error("Insufficient balance");
+
+      const { error: deductErr } = await supabase
+        .from("balances")
+        .update({ amount: Number(bal.amount) - amount })
+        .eq("id", balanceId);
+      if (deductErr) throw deductErr;
+
+      // Create withdrawal record
+      const { error: wErr } = await supabase.from("withdrawals").insert({
+        user_id: userId,
+        currency_id: currencyId,
+        amount,
+        wallet_address: walletAddress,
+        status: "pending",
+      });
+      if (wErr) throw wErr;
+    },
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["withdrawals-user", v.userId] });
+      qc.invalidateQueries({ queryKey: ["balances", v.userId] });
+      qc.invalidateQueries({ queryKey: ["withdrawals-admin"] });
+    },
+  });
+}
+
+export function useApproveWithdrawal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("withdrawals")
+        .update({ status: "approved", processed_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["withdrawals-admin"] }),
+  });
+}
+
+export function useRejectWithdrawal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, userId, currencyId, amount }: { id: string; userId: string; currencyId: string; amount: number }) => {
+      // Refund balance
+      const { data: bal, error: balErr } = await supabase
+        .from("balances")
+        .select("id, amount")
+        .eq("user_id", userId)
+        .eq("currency_id", currencyId)
+        .maybeSingle();
+      if (balErr) throw balErr;
+      if (bal) {
+        await supabase.from("balances").update({ amount: Number(bal.amount) + amount }).eq("id", bal.id);
+      }
+
+      const { error } = await supabase
+        .from("withdrawals")
+        .update({ status: "rejected", processed_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["withdrawals-admin"] }),
+  });
+}
+
+export function useUpdateCurrency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { icon_url?: string | null; name?: string; exchange_rate?: number } }) => {
+      const { error } = await supabase.from("currencies").update(data).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["currencies"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["all-tasks"] });
+    },
   });
 }
 

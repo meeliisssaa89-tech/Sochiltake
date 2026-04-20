@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useAllUsers, useAllTasks, useCurrencies, usePlatformStats } from "@/hooks/useSupabaseData";
+import { useAllUsers, useAllTasks, useCurrencies, usePlatformStats, useUploadImage, useUpdateCurrency } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,13 +17,14 @@ import { AdminSettingsView } from "@/components/admin/AdminSettingsView";
 import { AdminTasksView } from "@/components/admin/AdminTasksView";
 import { AdminSpinView } from "@/components/admin/AdminSpinView";
 import { AdminWalletView } from "@/components/admin/AdminWalletView";
+import { AdminWithdrawalsView } from "@/components/admin/AdminWithdrawalsView";
 import {
-  LayoutDashboard, Users, ListChecks, Coins, Settings, Search, Trash2, Ban, ArrowLeft,
-  TrendingUp, DollarSign, CheckCircle2, UserPlus, Image as ImageIcon, Megaphone, Send,
-  Sparkles, Wallet,
+  LayoutDashboard, Users, ListChecks, Coins, Settings, Search, Ban, ArrowLeft,
+  TrendingUp, DollarSign, CheckCircle2, UserPlus, Image as ImageIcon, Send,
+  Sparkles, Wallet, Upload, Loader2,
 } from "lucide-react";
 
-type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings";
+type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals";
 
 export function AdminPanel() {
   const { t } = useLanguage();
@@ -35,6 +36,7 @@ export function AdminPanel() {
     { id: "users" as const, icon: Users, label: t("userManagement") },
     { id: "tasks" as const, icon: ListChecks, label: t("taskManagement") },
     { id: "currencies" as const, icon: Coins, label: t("currencyManagement") },
+    { id: "withdrawals" as const, icon: Wallet, label: t("withdrawManagement") },
     { id: "ads" as const, icon: TrendingUp, label: t("adsConfig") },
     { id: "spin" as const, icon: Sparkles, label: t("spinManagement") },
     { id: "wallet" as const, icon: Wallet, label: t("walletManagement") },
@@ -77,6 +79,7 @@ export function AdminPanel() {
         {activeTab === "users" && <UsersView search={searchQuery} setSearch={setSearchQuery} />}
         {activeTab === "tasks" && <AdminTasksView />}
         {activeTab === "currencies" && <CurrenciesView />}
+        {activeTab === "withdrawals" && <AdminWithdrawalsView />}
         {activeTab === "ads" && <AdminAdsView />}
         {activeTab === "spin" && <AdminSpinView />}
         {activeTab === "wallet" && <AdminWalletView />}
@@ -201,6 +204,10 @@ function CurrenciesView() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: currencies, isLoading } = useCurrencies();
+  const uploadImage = useUploadImage();
+  const updateCurrency = useUpdateCurrency();
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const toggleActive = async (id: string, isActive: boolean) => {
     await supabase.from("currencies").update({ is_active: !isActive }).eq("id", id);
@@ -208,28 +215,80 @@ function CurrenciesView() {
     toast({ title: t("success") });
   };
 
+  const handleIconUpload = async (id: string, file: File) => {
+    setUploadingId(id);
+    try {
+      const url = await uploadImage.mutateAsync({ file, path: `currencies/${id}` });
+      await updateCurrency.mutateAsync({ id, data: { icon_url: url } });
+      toast({ title: t("success") });
+    } catch (err: any) {
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
   return (
     <div className="space-y-3">
       {isLoading ? (
         <div className="space-y-2">
-          {[1, 2].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
+          {[1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
       ) : (
         (currencies || []).map((c) => (
-          <div key={c.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-bold">
-              {c.symbol[0]}
+          <div key={c.id} className="glass-card rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-3">
+              {/* Icon preview + upload */}
+              <div className="relative group">
+                {c.icon_url ? (
+                  <img src={c.icon_url} alt={c.symbol} className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-bold">
+                    {c.symbol[0]}
+                  </div>
+                )}
+                <button
+                  onClick={() => fileInputRefs.current[c.id]?.click()}
+                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                  disabled={uploadingId === c.id}
+                >
+                  {uploadingId === c.id ? (
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-white" />
+                  )}
+                </button>
+                <input
+                  ref={(el) => { fileInputRefs.current[c.id] = el; }}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleIconUpload(c.id, file);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">{c.name}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {c.symbol} • {t("exchangeRate")}: {c.exchange_rate}
+                </p>
+                {!c.icon_url && (
+                  <button
+                    onClick={() => fileInputRefs.current[c.id]?.click()}
+                    className="text-[10px] text-primary flex items-center gap-0.5 mt-0.5"
+                  >
+                    <Upload className="w-2.5 h-2.5" /> رفع أيقونة / Upload icon
+                  </button>
+                )}
+              </div>
+              <Switch
+                checked={c.is_active}
+                onCheckedChange={() => toggleActive(c.id, c.is_active)}
+              />
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold">{c.name}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {c.symbol} • {t("exchangeRate")}: {c.exchange_rate}
-              </p>
-            </div>
-            <Switch
-              checked={c.is_active}
-              onCheckedChange={() => toggleActive(c.id, c.is_active)}
-            />
           </div>
         ))
       )}
