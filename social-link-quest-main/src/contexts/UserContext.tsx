@@ -88,8 +88,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       if (data?.user) {
         setUser(data.user);
-        setBalances(data.balances || []);
         setIsAdmin(data.isAdmin || false);
+
+        // Always re-fetch balances directly from DB after auth
+        // (the edge function may return stale/zero amounts due to upsert bug)
+        const { data: freshBalances } = await supabase
+          .from("balances")
+          .select("*, currencies(*)")
+          .eq("user_id", data.user.telegram_id);
+        setBalances((freshBalances as Balance[]) || data.balances || []);
       } else {
         console.error("Auth failed:", data);
       }
