@@ -85,7 +85,7 @@ export function TasksPage() {
       } else if (result.verified) {
         toast({
           title: t("success"),
-          description: `+${result.reward}`,
+          description: result.xp > 0 ? `+${result.reward}  •  +${result.xp} EXP` : `+${result.reward}`,
         });
       }
     } catch (err: any) {
@@ -176,8 +176,11 @@ export function TasksPage() {
                       ) : (
                         <Coins className="w-3 h-3" />
                       )}
-                      +{task.reward_amount} {(task as any).currencies?.symbol || "FG"}
+                      +{task.reward_amount} {(task as any).currencies?.symbol || "TON"}
                     </span>
+                    {task.xp_reward > 0 && (
+                      <span className="text-[10px] text-primary">+{task.xp_reward} EXP</span>
+                    )}
                   </div>
                 </div>
                 {isCompleted ? (

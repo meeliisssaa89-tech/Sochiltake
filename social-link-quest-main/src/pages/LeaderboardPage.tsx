@@ -54,7 +54,7 @@ export function LeaderboardPage() {
       const result = await redeemPromo.mutateAsync({ userId: user.telegram_id, code: promoCode.trim().toUpperCase() });
       toast({
         title: t("success"),
-        description: result.message || `+${result.reward}`,
+        description: result.message || (result.xp > 0 ? `+${result.reward}  •  +${result.xp} EXP` : `+${result.reward}`),
       });
       setPromoCode("");
     } catch (err: any) {

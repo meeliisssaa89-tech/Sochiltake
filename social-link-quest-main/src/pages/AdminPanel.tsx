@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAllUsers, useAllTasks, useCurrencies, usePlatformStats, useUploadImage, useUpdateCurrency, useCreateCurrency } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminAdsView } from "@/components/admin/AdminAdsView";
 import { AdminIconsView } from "@/components/admin/AdminIconsView";
 import { AdminBroadcastView } from "@/components/admin/AdminBroadcastView";
@@ -21,10 +21,12 @@ import { AdminWithdrawalsView } from "@/components/admin/AdminWithdrawalsView";
 import { AdminActivityView } from "@/components/admin/AdminActivityView";
 import { AdminPromoCodesView } from "@/components/admin/AdminPromoCodesView";
 import { AdminBotView } from "@/components/admin/AdminBotView";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import {
   LayoutDashboard, Users, ListChecks, Coins, Settings, Search, Ban, ArrowLeft,
   TrendingUp, DollarSign, CheckCircle2, UserPlus, Image as ImageIcon, Send,
   Sparkles, Wallet, Upload, Loader2, Trophy, Tag, Bot,
+  X, Plus, Minus, Trash2, Activity, Star, Shield, ChevronRight,
 } from "lucide-react";
 
 type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo" | "bot";
@@ -105,15 +107,47 @@ function DashboardView() {
   const { data: stats } = usePlatformStats();
   const { data: allUsers } = useAllUsers();
 
+  const { data: userTasks } = useQuery({
+    queryKey: ["admin-user-tasks-all"],
+    queryFn: async () => {
+      const { data } = await supabase.from("user_tasks").select("*").order("created_at", { ascending: false }).limit(500);
+      return data || [];
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: adWatches } = useQuery({
+    queryKey: ["admin-ad-watches-all"],
+    queryFn: async () => {
+      const { data } = await supabase.from("ad_watches").select("*").order("watched_at", { ascending: false }).limit(500);
+      return data || [];
+    },
+    staleTime: 60_000,
+  });
+
   const today = new Date().toISOString().split("T")[0];
   const activeToday = allUsers?.filter((u) => u.updated_at?.startsWith(today)).length || 0;
+  const newToday = allUsers?.filter((u) => u.created_at?.startsWith(today)).length || 0;
+  const tasksToday = userTasks?.filter((ut) => ut.created_at?.startsWith(today)).length || 0;
+  const adsToday = adWatches?.filter((a) => (a.watched_at || "").startsWith(today)).length || 0;
 
   const dashStats = [
     { icon: Users, label: t("totalUsers"), value: stats?.totalUsers?.toLocaleString() || "0", color: "text-primary" },
     { icon: UserPlus, label: t("activeUsers"), value: String(activeToday), color: "text-success" },
     { icon: CheckCircle2, label: t("tasksCompleted"), value: stats?.totalCompleted?.toLocaleString() || "0", color: "text-accent" },
-    { icon: DollarSign, label: t("rewardsDistributed"), value: `${stats?.totalCompleted || 0}`, color: "text-primary" },
+    { icon: TrendingUp, label: t("adsToday"), value: String(adsToday), color: "text-yellow-500" },
   ];
+
+  const last7 = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const key = d.toISOString().split("T")[0];
+    const label = d.toLocaleDateString("en", { weekday: "short" });
+    const users = allUsers?.filter((u) => u.updated_at?.startsWith(key)).length || 0;
+    const tasks = userTasks?.filter((ut) => ut.created_at?.startsWith(key)).length || 0;
+    const ads = adWatches?.filter((a) => (a.watched_at || "").startsWith(key)).length || 0;
+    return { label, users, tasks, ads };
+  });
 
   return (
     <div className="space-y-4">
@@ -134,15 +168,316 @@ function DashboardView() {
           </motion.div>
         ))}
       </div>
+
+      {/* Today summary */}
+      <div className="glass-card rounded-xl p-3">
+        <p className="text-xs font-semibold mb-3 text-muted-foreground">Today's Activity</p>
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div>
+            <p className="text-lg font-bold tabular-nums text-primary">{newToday}</p>
+            <p className="text-[9px] text-muted-foreground">New Users</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold tabular-nums text-accent">{tasksToday}</p>
+            <p className="text-[9px] text-muted-foreground">Tasks Done</p>
+          </div>
+          <div>
+            <p className="text-lg font-bold tabular-nums text-yellow-500">{adsToday}</p>
+            <p className="text-[9px] text-muted-foreground">Ads Watched</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 7-day activity bar chart */}
+      <div className="glass-card rounded-xl p-3">
+        <p className="text-xs font-semibold mb-3">Active Users — Last 7 Days</p>
+        <ResponsiveContainer width="100%" height={120}>
+          <BarChart data={last7} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+            <XAxis dataKey="label" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 11 }}
+              cursor={{ fill: "rgba(255,255,255,0.05)" }}
+            />
+            <Bar dataKey="users" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Users" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* 7-day tasks + ads chart */}
+      <div className="glass-card rounded-xl p-3">
+        <p className="text-xs font-semibold mb-3">Tasks & Ads — Last 7 Days</p>
+        <ResponsiveContainer width="100%" height={120}>
+          <BarChart data={last7} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+            <XAxis dataKey="label" tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 11 }}
+              cursor={{ fill: "rgba(255,255,255,0.05)" }}
+            />
+            <Bar dataKey="tasks" fill="hsl(var(--accent))" radius={[4, 4, 0, 0]} name="Tasks" />
+            <Bar dataKey="ads" fill="#eab308" radius={[4, 4, 0, 0]} name="Ads" />
+          </BarChart>
+        </ResponsiveContainer>
+        <div className="flex items-center gap-3 mt-2 justify-center">
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-accent" /><span className="text-[9px] text-muted-foreground">Tasks</span></div>
+          <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-sm bg-yellow-500" /><span className="text-[9px] text-muted-foreground">Ads</span></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void }) {
+  const { t } = useLanguage();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [adjustCurrencyId, setAdjustCurrencyId] = useState("");
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustMode, setAdjustMode] = useState<"add" | "remove">("add");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const { data: balances } = useQuery({
+    queryKey: ["admin-user-balances", u.telegram_id],
+    queryFn: async () => {
+      const { data } = await supabase.from("user_balances").select("*, currencies(*)").eq("user_id", u.telegram_id);
+      return data || [];
+    },
+  });
+
+  const { data: recentTasks } = useQuery({
+    queryKey: ["admin-user-tasks", u.telegram_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("user_tasks")
+        .select("*, tasks(title, reward_amount)")
+        .eq("user_id", u.telegram_id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+      return data || [];
+    },
+  });
+
+  const handleBan = async () => {
+    await supabase.from("users").update({ is_banned: !u.is_banned }).eq("telegram_id", u.telegram_id);
+    queryClient.invalidateQueries({ queryKey: ["all-users"] });
+    toast({ title: t("success") });
+    onClose();
+  };
+
+  const handleAdjustBalance = async () => {
+    if (!adjustCurrencyId || !adjustAmount) return;
+    const amt = parseFloat(adjustAmount);
+    if (isNaN(amt) || amt <= 0) return;
+    const balance = balances?.find((b: any) => b.currency_id === adjustCurrencyId);
+    if (!balance) return;
+    const newAmount = adjustMode === "add"
+      ? Number(balance.amount) + amt
+      : Math.max(0, Number(balance.amount) - amt);
+    await supabase.from("user_balances").update({ amount: newAmount }).eq("id", balance.id);
+    queryClient.invalidateQueries({ queryKey: ["admin-user-balances", u.telegram_id] });
+    toast({ title: t("success"), description: `${adjustMode === "add" ? "+" : "-"}${amt}` });
+    setAdjustAmount("");
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setIsDeleting(true);
+    await supabase.from("users").delete().eq("telegram_id", u.telegram_id);
+    queryClient.invalidateQueries({ queryKey: ["all-users"] });
+    toast({ title: "User deleted" });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="relative w-full max-w-lg bg-card rounded-t-3xl p-4 space-y-4 max-h-[90vh] overflow-y-auto pb-safe"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="w-10 h-1 rounded-full bg-border mx-auto" />
+
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          {u.photo_url ? (
+            <img src={u.photo_url} alt="" className="w-12 h-12 rounded-full object-cover" />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-lg font-bold">
+              {(u.first_name || "U")[0]}
+            </div>
+          )}
+          <div className="flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="font-semibold">{u.first_name} {u.last_name}</p>
+              {u.is_banned && <Badge className="bg-destructive/10 text-destructive border-0 text-[9px]">{t("banned")}</Badge>}
+            </div>
+            <p className="text-[11px] text-muted-foreground">@{u.username || "—"} • {u.telegram_id}</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="glass-card rounded-xl p-2.5 text-center">
+            <div className="flex items-center justify-center gap-1 mb-0.5"><Star className="w-3 h-3 text-primary" /></div>
+            <p className="text-sm font-bold">{u.level || 1}</p>
+            <p className="text-[9px] text-muted-foreground">{t("level")}</p>
+          </div>
+          <div className="glass-card rounded-xl p-2.5 text-center">
+            <div className="flex items-center justify-center gap-1 mb-0.5"><Activity className="w-3 h-3 text-accent" /></div>
+            <p className="text-sm font-bold">{(u.exp || 0).toLocaleString()}</p>
+            <p className="text-[9px] text-muted-foreground">{t("exp")}</p>
+          </div>
+          <div className="glass-card rounded-xl p-2.5 text-center">
+            <div className="flex items-center justify-center gap-1 mb-0.5"><Shield className="w-3 h-3 text-yellow-500" /></div>
+            <p className="text-sm font-bold">{u.streak || 0}</p>
+            <p className="text-[9px] text-muted-foreground">{t("streak")}</p>
+          </div>
+        </div>
+
+        {/* Balances */}
+        {balances && balances.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold mb-2">{t("appBalances")}</p>
+            <div className="space-y-1.5">
+              {balances.map((b: any) => {
+                const cur = b.currencies;
+                const iconUrl = cur?.icon_url || (cur?.symbol === "TON" ? "https://ton.org/icons/ton_symbol.svg" : null);
+                return (
+                  <div key={b.id} className="glass-card rounded-xl p-3 flex items-center gap-3">
+                    {iconUrl ? (
+                      <img src={iconUrl} alt={cur?.symbol} className="w-8 h-8 rounded-full bg-secondary p-0.5 shrink-0 object-contain" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold shrink-0">
+                        {cur?.symbol?.[0] || "?"}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{cur?.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{cur?.symbol}</p>
+                    </div>
+                    <p className="text-sm font-bold tabular-nums">{Number(b.amount).toLocaleString()}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Balance Adjustment */}
+        {balances && balances.length > 0 && (
+          <div className="glass-card rounded-xl p-3 space-y-2 border border-primary/10">
+            <p className="text-xs font-semibold">Adjust Balance</p>
+            <div className="flex gap-1.5">
+              {balances.map((b: any) => (
+                <button
+                  key={b.id}
+                  onClick={() => setAdjustCurrencyId(b.currency_id)}
+                  className={`flex-1 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
+                    adjustCurrencyId === b.currency_id
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {b.currencies?.symbol}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setAdjustMode("add")}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
+                  adjustMode === "add" ? "border-success bg-success/10 text-success" : "border-border bg-secondary text-muted-foreground"
+                }`}
+              >
+                <Plus className="w-3 h-3" /> Add
+              </button>
+              <button
+                onClick={() => setAdjustMode("remove")}
+                className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-medium transition-all border ${
+                  adjustMode === "remove" ? "border-destructive bg-destructive/10 text-destructive" : "border-border bg-secondary text-muted-foreground"
+                }`}
+              >
+                <Minus className="w-3 h-3" /> Remove
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                placeholder="Amount"
+                value={adjustAmount}
+                onChange={(e) => setAdjustAmount(e.target.value)}
+                className="flex-1 h-8 text-xs bg-secondary border-border rounded-xl"
+              />
+              <Button size="sm" onClick={handleAdjustBalance} className="h-8 px-3 text-xs rounded-xl" disabled={!adjustCurrencyId || !adjustAmount}>
+                Apply
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Recent Activity */}
+        {recentTasks && recentTasks.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold mb-2">Recent Tasks</p>
+            <div className="space-y-1">
+              {recentTasks.slice(0, 5).map((ut: any) => (
+                <div key={ut.id} className="flex items-center gap-2 py-1.5 border-b border-border/50 last:border-0">
+                  <CheckCircle2 className="w-3 h-3 text-success shrink-0" />
+                  <p className="text-[11px] flex-1 truncate">{ut.tasks?.title || "Task"}</p>
+                  <p className="text-[9px] text-muted-foreground">{new Date(ut.created_at).toLocaleDateString()}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          <Button
+            variant="outline"
+            className={`flex-1 h-9 text-xs rounded-xl border ${u.is_banned ? "border-success text-success" : "border-yellow-500 text-yellow-600"}`}
+            onClick={handleBan}
+          >
+            <Ban className="w-3.5 h-3.5 me-1" />
+            {u.is_banned ? t("unban") : t("ban")}
+          </Button>
+          <Button
+            variant="outline"
+            className={`flex-1 h-9 text-xs rounded-xl border ${confirmDelete ? "border-destructive bg-destructive text-white" : "border-destructive text-destructive"}`}
+            onClick={handleDelete}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <>
+                <Trash2 className="w-3.5 h-3.5 me-1" />
+                {confirmDelete ? "Confirm Delete" : "Delete User"}
+              </>
+            )}
+          </Button>
+        </div>
+      </motion.div>
     </div>
   );
 }
 
 function UsersView({ search, setSearch }: { search: string; setSearch: (s: string) => void }) {
   const { t } = useLanguage();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const { data: users, isLoading } = useAllUsers();
+  const [selectedUser, setSelectedUser] = useState<any>(null);
 
   const filtered = (users || []).filter((u) => {
     const s = search.toLowerCase();
@@ -152,12 +487,6 @@ function UsersView({ search, setSearch }: { search: string; setSearch: (s: strin
       u.telegram_id.includes(s)
     );
   });
-
-  const toggleBan = async (telegramId: string, isBanned: boolean) => {
-    await supabase.from("users").update({ is_banned: !isBanned }).eq("telegram_id", telegramId);
-    queryClient.invalidateQueries({ queryKey: ["all-users"] });
-    toast({ title: t("success") });
-  };
 
   return (
     <div className="space-y-3">
@@ -176,32 +505,39 @@ function UsersView({ search, setSearch }: { search: string; setSearch: (s: strin
         </div>
       ) : (
         filtered.map((u) => (
-          <div key={u.telegram_id} className="glass-card rounded-xl p-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-bold">
-              {(u.first_name || "U")[0]}
-            </div>
+          <button
+            key={u.telegram_id}
+            className="w-full glass-card rounded-xl p-3 flex items-center gap-3 text-left hover:border-primary/20 transition-colors"
+            onClick={() => setSelectedUser(u)}
+          >
+            {u.photo_url ? (
+              <img src={u.photo_url} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-sm font-bold shrink-0">
+                {(u.first_name || "U")[0]}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <p className="text-sm font-semibold">{u.first_name} {u.last_name}</p>
+                <p className="text-sm font-semibold truncate">{u.first_name} {u.last_name}</p>
                 {u.is_banned && (
-                  <Badge className="bg-destructive/10 text-destructive border-0 text-[9px]">{t("banned")}</Badge>
+                  <Badge className="bg-destructive/10 text-destructive border-0 text-[9px] shrink-0">{t("banned")}</Badge>
                 )}
               </div>
-              <p className="text-[10px] text-muted-foreground">
-                @{u.username || "—"} • ID: {u.telegram_id} • Lvl {u.level}
+              <p className="text-[10px] text-muted-foreground truncate">
+                @{u.username || "—"} • Lvl {u.level} • {(u.exp || 0).toLocaleString()} EXP
               </p>
             </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 text-destructive"
-              onClick={() => toggleBan(u.telegram_id, u.is_banned)}
-            >
-              <Ban className="w-3.5 h-3.5" />
-            </Button>
-          </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          </button>
         ))
       )}
+
+      <AnimatePresence>
+        {selectedUser && (
+          <UserDetailModal user={selectedUser} onClose={() => setSelectedUser(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

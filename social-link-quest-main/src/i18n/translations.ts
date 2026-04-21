@@ -55,6 +55,7 @@ export const translations = {
     uptime: "Uptime",
     tasksRanking: "Tasks",
     referralRanking: "Referrals",
+    referrals: "Referrals",
     yourRank: "Your Rank",
     earnings: "Earnings",
 
@@ -219,6 +220,7 @@ export const translations = {
     uptime: "وقت التشغيل",
     tasksRanking: "المهام",
     referralRanking: "الإحالات",
+    referrals: "الإحالات",
     yourRank: "ترتيبك",
     earnings: "الأرباح",
 

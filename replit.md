@@ -41,19 +41,22 @@ Located in `social-link-quest-main/.env`:
 The app uses a multi-currency system based on Supabase `currencies` table:
 - **TON** (Toncoin) and **USDT** (Tether) are the primary currencies
 - Currencies can be added from the Admin Panel → Currencies → Quick Add
-- XP/points display has been removed from the UI (still stored in DB for leveling logic)
+- XP is displayed as a progress bar in the HomePage user card and in reward toasts
+- XP level: `floor(exp / 5000) + 1`; each level requires 5000 XP
 - Balance protection: amount is deducted before withdrawal record is created
 
 ## TON Wallet Integration
-Users can connect their TON wallet address in the Profile page:
-- Address is stored in `localStorage` under key `ton_connected_wallet`
-- On-chain balances (TON + USDT) are fetched from TonCenter public API
-- USDT is fetched as a Jetton from master: `EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs`
+Uses TonConnect v2 via CDN (npm package unavailable due to libc mismatch):
+- CDN script loaded in `index.html` from unpkg: `@tonconnect/ui@2.0.11`
+- Manifest file at `public/tonconnect-manifest.json`
+- React hook: `src/hooks/useTonConnect.ts` — wraps the global `TonConnectUI` instance
+- Supports Tonkeeper, TON Space, and all TonConnect-compatible wallets
+- On-chain balances fetched via TonCenter public API after connection
 
 ## Admin Panel
 Access via `/admin` route. Tabs include:
-- Dashboard - Platform stats
-- Users - User management (ban/unban)
+- Dashboard - Platform stats + 7-day bar charts (users, tasks, ads)
+- Users - Full user detail modal (profile, balances, adjust balance, ban, delete)
 - Tasks - Task management
 - Currencies - Currency management (quick-add TON/USDT, custom currency form)
 - Ads Config - Ad network settings (SDK injection, daily ads config, zone IDs)
