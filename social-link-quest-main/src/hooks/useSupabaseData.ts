@@ -608,3 +608,33 @@ export function useRedeemPromoCode() {
     },
   });
 }
+
+export function useActivityFeed(userId?: string, limit = 40) {
+  return useQuery({
+    queryKey: ["activity-feed", userId || "all"],
+    queryFn: async () => {
+      let q = supabase
+        .from("activity_feed")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      if (userId) q = q.eq("user_id", userId);
+      const { data, error } = await q;
+      if (error) throw error;
+      return data || [];
+    },
+  });
+}
+
+export function useDeleteActivityItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("activity_feed").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["activity-feed"] });
+    },
+  });
+}

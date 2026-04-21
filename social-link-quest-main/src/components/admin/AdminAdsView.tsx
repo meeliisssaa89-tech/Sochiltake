@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAppSettings, useUpdateSetting } from "@/hooks/useSupabaseData";
+import { useAppSettings, useUpdateSetting, useCurrencies } from "@/hooks/useSupabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -58,6 +58,7 @@ const BUTTON_SLOTS = [
 
 export function AdminAdsView() {
   const { data: settings, isLoading: settingsLoading } = useAppSettings();
+  const { data: currencies = [] } = useCurrencies();
   const update = useUpdateSetting();
   const { toast } = useToast();
 
@@ -68,6 +69,7 @@ export function AdminAdsView() {
     xp_per_ad: 5,
     duration_seconds: 15,
   });
+  const [rewardCurrencySymbol, setRewardCurrencySymbol] = useState<string>("");
 
   const [platforms, setPlatforms] = useState<Record<string, PlatformConfig>>({
     adgram: { ...defaultPlatform },
@@ -88,7 +90,9 @@ export function AdminAdsView() {
   useEffect(() => {
     if (!settings) return;
     if (settings.ads_daily && typeof settings.ads_daily === "object") {
-      setAds((prev) => ({ ...prev, ...(settings.ads_daily as object) }));
+      const d = settings.ads_daily as any;
+      setAds((prev) => ({ ...prev, ...d }));
+      if (d.reward_currency_symbol) setRewardCurrencySymbol(d.reward_currency_symbol);
     }
     if (settings.ads_platforms && typeof settings.ads_platforms === "object") {
       const saved = settings.ads_platforms as Record<string, any>;
@@ -181,7 +185,23 @@ export function AdminAdsView() {
             <Input type="number" value={ads.duration_seconds} onChange={(e) => setAds({ ...ads, duration_seconds: +e.target.value })} className="h-8" />
           </div>
         </div>
-        <Button size="sm" onClick={() => save("ads_daily", ads)} disabled={savingKey === "ads_daily"} className="w-full h-8 text-xs">
+
+        <div>
+          <label className="text-[10px] text-muted-foreground font-medium">Reward Currency</label>
+          <p className="text-[9px] text-muted-foreground/70 mb-1">Which currency users earn per ad watched</p>
+          <select
+            value={rewardCurrencySymbol}
+            onChange={(e) => setRewardCurrencySymbol(e.target.value)}
+            className="w-full h-8 text-xs rounded-lg border border-border bg-card px-2"
+          >
+            <option value="">-- Select currency --</option>
+            {(currencies as any[]).map((c: any) => (
+              <option key={c.id} value={c.symbol}>{c.name} ({c.symbol})</option>
+            ))}
+          </select>
+        </div>
+
+        <Button size="sm" onClick={() => save("ads_daily", { ...ads, reward_currency_symbol: rewardCurrencySymbol })} disabled={savingKey === "ads_daily"} className="w-full h-8 text-xs">
           {savingKey === "ads_daily" ? <Loader2 className="w-3 h-3 me-1 animate-spin" /> : <Save className="w-3 h-3 me-1" />}
           Save Settings
         </Button>

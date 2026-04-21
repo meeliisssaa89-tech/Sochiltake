@@ -20,13 +20,14 @@ import { AdminWalletView } from "@/components/admin/AdminWalletView";
 import { AdminWithdrawalsView } from "@/components/admin/AdminWithdrawalsView";
 import { AdminActivityView } from "@/components/admin/AdminActivityView";
 import { AdminPromoCodesView } from "@/components/admin/AdminPromoCodesView";
+import { AdminBotView } from "@/components/admin/AdminBotView";
 import {
   LayoutDashboard, Users, ListChecks, Coins, Settings, Search, Ban, ArrowLeft,
   TrendingUp, DollarSign, CheckCircle2, UserPlus, Image as ImageIcon, Send,
-  Sparkles, Wallet, Upload, Loader2, Trophy, Tag,
+  Sparkles, Wallet, Upload, Loader2, Trophy, Tag, Bot,
 } from "lucide-react";
 
-type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo";
+type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo" | "bot";
 
 export function AdminPanel() {
   const { t } = useLanguage();
@@ -46,6 +47,7 @@ export function AdminPanel() {
     { id: "promo" as const, icon: Tag, label: t("promoManagement") },
     { id: "icons" as const, icon: ImageIcon, label: t("appearance") },
     { id: "broadcast" as const, icon: Send, label: t("broadcast") },
+    { id: "bot" as const, icon: Bot, label: t("bot") },
     { id: "settings" as const, icon: Settings, label: t("settings") },
   ];
 
@@ -91,6 +93,7 @@ export function AdminPanel() {
         {activeTab === "promo" && <AdminPromoCodesView />}
         {activeTab === "icons" && <AdminIconsView />}
         {activeTab === "broadcast" && <AdminBroadcastView />}
+        {activeTab === "bot" && <AdminBotView />}
         {activeTab === "settings" && <AdminSettingsView />}
       </div>
     </div>
