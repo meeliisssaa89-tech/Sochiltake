@@ -11,7 +11,7 @@ import { hapticImpact, hapticNotification } from "@/lib/telegram";
 
 export function DailyAdsCard() {
   const { t } = useLanguage();
-  const { user } = useUser();
+  const { user, refreshUser } = useUser();
   const { toast } = useToast();
   const userId = user?.telegram_id;
 
@@ -64,6 +64,7 @@ export function DailyAdsCard() {
         title: t("success"),
         description: `+${result.reward} ${currencySymbol}, +${result.xp} XP`,
       });
+      await refreshUser();
     } catch (err: any) {
       hapticNotification("error");
       toast({ title: t("error"), description: err.message, variant: "destructive" });

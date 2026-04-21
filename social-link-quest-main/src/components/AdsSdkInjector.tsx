@@ -47,7 +47,10 @@ export function AdsSdkInjector() {
       });
     };
 
-    if (platforms.adgram?.enabled && platforms.adgram?.block_id) {
+    const adgramHasIds =
+      (platforms.adgram?.block_ids?.length > 0) ||
+      !!platforms.adgram?.block_id;
+    if (platforms.adgram?.enabled && adgramHasIds) {
       injectScript(ADSGRAM_SDK, "adsgram");
     }
 
@@ -63,7 +66,7 @@ export function AdsSdkInjector() {
     if (legacySdkHtml?.trim()) {
       injectHtml(legacySdkHtml, "legacy");
     }
-  }, [platforms.adgram?.enabled, platforms.adgram?.block_id, platforms.montag?.enabled, platforms.montag?.sdk_html, platforms.custom?.enabled, platforms.custom?.sdk_html, settings?.ads_sdk_html]);
+  }, [platforms.adgram?.enabled, platforms.adgram?.block_id, JSON.stringify(platforms.adgram?.block_ids), platforms.montag?.enabled, platforms.montag?.sdk_html, platforms.custom?.enabled, platforms.custom?.sdk_html, settings?.ads_sdk_html]);
 
   return null;
 }

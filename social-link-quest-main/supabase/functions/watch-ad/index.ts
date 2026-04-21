@@ -38,8 +38,8 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Determine reward currency — try configured symbol first, then TON, then first active
-    const symbol = settings.reward_currency_symbol || 'TON';
+    // Determine reward currency — read from ads_daily config, then TON, then first active
+    const symbol = ads.reward_currency_symbol || 'TON';
     let currencyId: string | null = null;
 
     const { data: cur } = await supabase

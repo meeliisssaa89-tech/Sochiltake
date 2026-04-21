@@ -7,6 +7,9 @@ declare global {
     Adsgram?: {
       init: (opts: { blockId: string; debug?: boolean }) => { show: () => Promise<{ done: boolean }> };
     };
+    Monetag?: {
+      show: (opts: { type: string; zone: string }) => void;
+    };
     [k: string]: any;
   }
 }
@@ -70,6 +73,20 @@ export function useAdTrigger() {
   const triggerAllAdgram = async (cfg: PlatformConfig): Promise<boolean> => {
     const blockIds = getAllBlockIds(cfg);
     if (blockIds.length === 0) return false;
+
+    if (blockIds.length === 1) {
+      return triggerAdgram(blockIds[0], cfg.debug || false);
+    }
+
+    // Try combined blockId (comma-separated) so Adsgram shows all ads as one
+    // sequence session with a segmented progress bar
+    const combined = blockIds.join(",");
+    console.log(`[Adsgram] trying combined sequence: ${combined}`);
+    const combinedOk = await triggerAdgram(combined, cfg.debug || false);
+    if (combinedOk) return true;
+
+    // Fallback: trigger each block ID one by one sequentially
+    console.log("[Adsgram] combined failed, falling back to sequential...");
     let anyOk = false;
     for (let i = 0; i < blockIds.length; i++) {
       const bid = blockIds[i];
@@ -84,28 +101,49 @@ export function useAdTrigger() {
   const triggerMontag = async (zoneId: string): Promise<boolean> => {
     if (!zoneId) return false;
 
-    const candidates = [
-      `show_${zoneId}`,
-      `monetag_${zoneId}`,
-      "show_ad",
-      "invokeAdUnit",
-      "_monetag_show",
-      "montag_show",
-    ];
+    const tryTrigger = (): boolean => {
+      const candidates = [
+        `show_${zoneId}`,
+        `monetag_${zoneId}`,
+        "show_ad",
+        "invokeAdUnit",
+        "_monetag_show",
+        "montag_show",
+        "Monetag",
+      ];
 
-    for (const fnName of candidates) {
-      if (typeof window[fnName] === "function") {
-        try {
-          await window[fnName](zoneId);
-          console.log(`[Monetag] triggered via ${fnName}`);
-          return true;
-        } catch (e) {
-          console.warn(`[Monetag] ${fnName} failed:`, e);
+      for (const fnName of candidates) {
+        if (fnName === "Monetag" && window.Monetag?.show) {
+          try {
+            window.Monetag.show({ type: "interstitial", zone: zoneId });
+            console.log("[Monetag] triggered via window.Monetag.show");
+            return true;
+          } catch (e) {
+            console.warn("[Monetag] window.Monetag.show failed:", e);
+          }
+        } else if (typeof window[fnName] === "function") {
+          try {
+            window[fnName](zoneId);
+            console.log(`[Monetag] triggered via ${fnName}`);
+            return true;
+          } catch (e) {
+            console.warn(`[Monetag] ${fnName} failed:`, e);
+          }
         }
       }
-    }
+      return false;
+    };
 
-    console.warn("[Monetag] No callable trigger found — using timer wait instead");
+    if (tryTrigger()) return true;
+
+    console.log("[Monetag] SDK not ready yet, retrying in 1s...");
+    await new Promise((r) => setTimeout(r, 1000));
+    if (tryTrigger()) return true;
+
+    await new Promise((r) => setTimeout(r, 2000));
+    if (tryTrigger()) return true;
+
+    console.warn("[Monetag] No callable trigger found after retries");
     return false;
   };
 
