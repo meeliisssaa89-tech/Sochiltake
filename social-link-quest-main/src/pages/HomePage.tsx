@@ -111,8 +111,8 @@ export function HomePage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card rounded-2xl p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center overflow-hidden">
-              <AppIcon src={sectionIcons.section_checkin} fallback={Calendar} size={16} className="w-4 h-4 text-accent object-contain" />
+            <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center overflow-hidden shrink-0">
+              <AppIcon src={sectionIcons.section_checkin} fallback={Calendar} size={32} className="w-9 h-9 text-accent object-contain" />
             </div>
             <div>
               <h3 className="font-semibold text-sm">{t("dailyCheckin")}</h3>
@@ -149,8 +149,8 @@ export function HomePage() {
       {/* Official Guide */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
         className="glass-card rounded-2xl p-4 flex items-center gap-3 cursor-pointer hover:border-primary/30 transition-colors">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
-          <AppIcon src={sectionIcons.section_guide} fallback={BookOpen} size={20} className="w-5 h-5 text-primary object-contain" />
+        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+          <AppIcon src={sectionIcons.section_guide} fallback={BookOpen} size={32} className="w-9 h-9 text-primary object-contain" />
         </div>
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-sm">{t("officialGuide")}</h3>

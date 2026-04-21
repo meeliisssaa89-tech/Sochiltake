@@ -44,11 +44,11 @@ interface Achievement {
 }
 
 const DEFAULT_ACHIEVEMENTS: Achievement[] = [
-  { id: "1", title_en: "Early Bird",     title_ar: "الطائر المبكر", desc_en: "Complete 10 tasks",    desc_ar: "أكمل 10 مهام",      goal_type: "tasks_completed", goal_value: 10,  reward_label: "500 PTS",    is_active: true },
-  { id: "2", title_en: "Streak Master",  title_ar: "ملك السلاسل",   desc_en: "30-day check-in streak",desc_ar: "سلسلة 30 يوم",     goal_type: "checkin_streak",  goal_value: 30,  reward_label: "2,000 PTS",  is_active: true },
-  { id: "3", title_en: "Top Referrer",   title_ar: "أفضل مُحيل",    desc_en: "Invite 20 friends",    desc_ar: "ادعُ 20 صديقاً",   goal_type: "referrals",       goal_value: 20,  reward_label: "5,000 PTS",  is_active: true },
-  { id: "4", title_en: "Task Champion",  title_ar: "بطل المهام",    desc_en: "Complete 50 tasks",    desc_ar: "أكمل 50 مهمة",      goal_type: "tasks_completed", goal_value: 50,  reward_label: "10,000 PTS", is_active: true },
-  { id: "5", title_en: "Ad Watcher",     title_ar: "مشاهد الإعلانات",desc_en: "Watch 100 ads",       desc_ar: "شاهد 100 إعلان",   goal_type: "ads_watched",     goal_value: 100, reward_label: "1,000 PTS",  is_active: true },
+  { id: "1", title_en: "Early Bird",     title_ar: "الطائر المبكر", desc_en: "Complete 10 tasks",    desc_ar: "أكمل 10 مهام",      goal_type: "tasks_completed", goal_value: 10,  reward_label: "0.5 USDT",   is_active: true },
+  { id: "2", title_en: "Streak Master",  title_ar: "ملك السلاسل",   desc_en: "30-day check-in streak",desc_ar: "سلسلة 30 يوم",     goal_type: "checkin_streak",  goal_value: 30,  reward_label: "2 USDT",     is_active: true },
+  { id: "3", title_en: "Top Referrer",   title_ar: "أفضل مُحيل",    desc_en: "Invite 20 friends",    desc_ar: "ادعُ 20 صديقاً",   goal_type: "referrals",       goal_value: 20,  reward_label: "5 USDT",     is_active: true },
+  { id: "4", title_en: "Task Champion",  title_ar: "بطل المهام",    desc_en: "Complete 50 tasks",    desc_ar: "أكمل 50 مهمة",      goal_type: "tasks_completed", goal_value: 50,  reward_label: "10 USDT",    is_active: true },
+  { id: "5", title_en: "Ad Watcher",     title_ar: "مشاهد الإعلانات",desc_en: "Watch 100 ads",       desc_ar: "شاهد 100 إعلان",   goal_type: "ads_watched",     goal_value: 100, reward_label: "1 USDT",     is_active: true },
 ];
 
 export function ActivityPage() {
@@ -227,7 +227,7 @@ export function ActivityPage() {
         {tab === "stats" && (
           <motion.div key="stats" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
             {[
-              { icon: TrendingUp, label: t("totalBalance"),    value: totalBalance.toLocaleString(), sub: "PTS", color: "text-accent",    pct: Math.min((totalBalance / 10000) * 100, 100) },
+              { icon: TrendingUp, label: t("totalBalance"),    value: totalBalance.toLocaleString(), sub: balances[0]?.currencies?.symbol || "USDT", color: "text-accent",    pct: Math.min((totalBalance / 100) * 100, 100) },
               { icon: CheckCircle2, label: t("tasksCompleted"),value: String(completedCount),         sub: "/ 100", color: "text-primary",  pct: Math.min((completedCount / 100) * 100, 100) },
               { icon: Users,       label: t("referrals"),      value: String(referralCount),          sub: t("friends"), color: "text-blue-400", pct: Math.min((referralCount / 50) * 100, 100) },
               { icon: Target,      label: t("streak"),         value: String(streak),                 sub: t("days"),    color: "text-orange-400", pct: Math.min((streak / 30) * 100, 100) },

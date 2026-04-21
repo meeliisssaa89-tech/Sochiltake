@@ -39,7 +39,7 @@ const emptyAch: Achievement = {
   id: crypto.randomUUID(),
   title_en: "", title_ar: "", desc_en: "", desc_ar: "",
   goal_type: "tasks_completed", goal_value: 10,
-  reward_label: "100 PTS", is_active: true,
+  reward_label: "1 USDT", is_active: true,
 };
 
 export function AdminActivityView() {
@@ -174,7 +174,7 @@ export function AdminActivityView() {
                 </div>
                 <div className="col-span-2">
                   <label className="text-[10px] text-muted-foreground">Reward Label (display only)</label>
-                  <Input value={ach.reward_label} onChange={(e) => updateAch(ach.id, "reward_label", e.target.value)} className="h-7 text-xs" placeholder="e.g. 500 PTS" />
+                  <Input value={ach.reward_label} onChange={(e) => updateAch(ach.id, "reward_label", e.target.value)} className="h-7 text-xs" placeholder="e.g. 5 USDT" />
                 </div>
               </div>
             </div>

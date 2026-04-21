@@ -120,8 +120,8 @@ export function DailyAdsCard() {
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
-            <AppIcon src={sectionIcons.section_ads} fallback={Eye} size={16} className="w-4 h-4 text-primary object-contain" />
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden shrink-0">
+            <AppIcon src={sectionIcons.section_ads} fallback={Eye} size={32} className="w-9 h-9 text-primary object-contain" />
           </div>
           <div>
             <h3 className="font-semibold text-sm">{t("dailyAds")}</h3>

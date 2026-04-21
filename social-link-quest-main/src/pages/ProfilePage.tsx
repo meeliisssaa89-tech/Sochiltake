@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Languages, ArrowUpRight, Loader2, X, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLivePrices, getLiveRate } from "@/hooks/useLivePrices";
 
 interface Token {
   id: string;
@@ -42,10 +43,12 @@ export function ProfilePage() {
     },
   });
 
+  const { data: livePrices } = useLivePrices();
+
   const totalUsd = balances.reduce((sum, b) => {
     if (!b.currencies) return sum;
-    if (b.currencies.symbol === "USDT") return sum + Number(b.amount);
-    return sum + Number(b.amount) * Number(b.currencies.exchange_rate || 0);
+    const rate = getLiveRate(b.currencies.symbol, livePrices, Number(b.currencies.exchange_rate || 0));
+    return sum + Number(b.amount) * rate;
   }, 0);
 
   const TON_ICON = "https://ton.org/icons/ton_symbol.svg";
@@ -245,7 +248,8 @@ export function ProfilePage() {
           {balances.map((b) => {
             if (!b.currencies) return null;
             const cur = b.currencies as any;
-            const usdValue = cur.symbol === "USDT" ? Number(b.amount) : Number(b.amount) * Number(cur.exchange_rate || 0);
+            const liveRate = getLiveRate(cur.symbol, livePrices, Number(cur.exchange_rate || 0));
+            const usdValue = Number(b.amount) * liveRate;
             const iconUrl = cur.icon_url || (cur.symbol === "TON" ? TON_ICON : cur.symbol === "USDT" ? USDT_ICON : null);
             return (
               <div key={b.id} className="glass-card rounded-xl p-3 flex items-center gap-3">

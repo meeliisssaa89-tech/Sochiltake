@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { BottomNav } from "@/components/BottomNav";
 import { AdsSdkInjector } from "@/components/AdsSdkInjector";
@@ -27,6 +27,18 @@ export default function Index() {
   const { data: settings } = useAppSettings();
   const Page = pages[activeTab] || HomePage;
 
+  // Telegram WebApp: expand to full size & request fullscreen (Bot API 8.0+)
+  useEffect(() => {
+    const w = (window as any).Telegram?.WebApp;
+    if (!w) return;
+    try { w.ready?.(); } catch { /* noop */ }
+    try { w.expand?.(); } catch { /* noop */ }
+    try { w.requestFullscreen?.(); } catch { /* noop */ }
+    try { w.disableVerticalSwipes?.(); } catch { /* noop */ }
+    try { w.setHeaderColor?.("#000000"); } catch { /* noop */ }
+    try { w.setBackgroundColor?.("#000000"); } catch { /* noop */ }
+  }, []);
+
   const logoUrl = settings?.app_logo_url;
   const hasLogo = logoUrl && typeof logoUrl === "string" && logoUrl !== "null" && logoUrl.trim() !== "";
 
@@ -48,7 +60,7 @@ export default function Index() {
   }
 
   return (
-    <div className="min-h-screen bg-background" dir={dir}>
+    <div className="min-h-screen bg-background safe-top" dir={dir}>
       <AdsSdkInjector />
       <div className="max-w-lg mx-auto">
         {hasLogo && (
