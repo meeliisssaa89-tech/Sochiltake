@@ -91,21 +91,35 @@ Deno.serve(async (req) => {
     }
 
     // Credit balance
-    if (currencyId && ads.reward_per_ad > 0) {
+    if (currencyId && Number(ads.reward_per_ad) > 0) {
+      const reward = Number(ads.reward_per_ad);
+
+      // Get current balance
       const { data: bal } = await supabase
         .from('balances')
-        .select('amount')
+        .select('id, amount')
         .eq('user_id', userId)
         .eq('currency_id', currencyId)
         .maybeSingle();
 
-      const newAmount = Number(bal?.amount || 0) + Number(ads.reward_per_ad);
-      await supabase
-        .from('balances')
-        .upsert(
-          { user_id: userId, currency_id: currencyId, amount: newAmount },
-          { onConflict: 'user_id,currency_id' }
-        );
+      const newAmount = Number(bal?.amount || 0) + reward;
+
+      if (bal?.id) {
+        // Row exists — update it
+        const { error: updErr } = await supabase
+          .from('balances')
+          .update({ amount: newAmount })
+          .eq('id', bal.id);
+        if (updErr) console.error('balance update error:', updErr);
+      } else {
+        // No row yet — insert one
+        const { error: insErr } = await supabase
+          .from('balances')
+          .insert({ user_id: userId, currency_id: currencyId, amount: reward });
+        if (insErr) console.error('balance insert error:', insErr);
+      }
+    } else {
+      console.warn('balance not credited — currencyId:', currencyId, 'reward_per_ad:', ads.reward_per_ad);
     }
 
     // Add XP

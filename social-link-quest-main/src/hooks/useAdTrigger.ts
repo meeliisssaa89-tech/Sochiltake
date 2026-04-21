@@ -74,19 +74,6 @@ export function useAdTrigger() {
     const blockIds = getAllBlockIds(cfg);
     if (blockIds.length === 0) return false;
 
-    if (blockIds.length === 1) {
-      return triggerAdgram(blockIds[0], cfg.debug || false);
-    }
-
-    // Try combined blockId (comma-separated) so Adsgram shows all ads as one
-    // sequence session with a segmented progress bar
-    const combined = blockIds.join(",");
-    console.log(`[Adsgram] trying combined sequence: ${combined}`);
-    const combinedOk = await triggerAdgram(combined, cfg.debug || false);
-    if (combinedOk) return true;
-
-    // Fallback: trigger each block ID one by one sequentially
-    console.log("[Adsgram] combined failed, falling back to sequential...");
     let anyOk = false;
     for (let i = 0; i < blockIds.length; i++) {
       const bid = blockIds[i];
@@ -103,7 +90,8 @@ export function useAdTrigger() {
 
     const tryTrigger = (): boolean => {
       const candidates = [
-        `show_${zoneId}`,
+        zoneId,               // try zone_id as-is (e.g. "show_8914235")
+        `show_${zoneId}`,     // try prepending show_ (e.g. zone_id = "8914235")
         `monetag_${zoneId}`,
         "show_ad",
         "invokeAdUnit",

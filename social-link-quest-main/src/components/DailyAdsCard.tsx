@@ -8,10 +8,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useAdsToday, useWatchAd, useCurrencies } from "@/hooks/useSupabaseData";
 import { useAdTrigger } from "@/hooks/useAdTrigger";
 import { hapticImpact, hapticNotification } from "@/lib/telegram";
+import { supabase } from "@/integrations/supabase/client";
 
 export function DailyAdsCard() {
   const { t } = useLanguage();
-  const { user, refreshUser } = useUser();
+  const { user, refreshUser, balances } = useUser();
   const { toast } = useToast();
   const userId = user?.telegram_id;
 
@@ -36,6 +37,38 @@ export function DailyAdsCard() {
     return "TON";
   };
   const currencySymbol = getCurrencySymbol();
+
+  const creditBalanceDirectly = async (rewardAmount: number) => {
+    if (!userId || rewardAmount <= 0) return;
+    try {
+      const targetSymbol = adsConfig.reward_currency_symbol ||
+        (currencies && currencies.length > 0 ? currencies[0].symbol : "TON");
+      const { data: curRow } = await supabase
+        .from("currencies")
+        .select("id")
+        .eq("symbol", targetSymbol)
+        .eq("is_active", true)
+        .maybeSingle();
+      const currencyId = curRow?.id;
+      if (!currencyId) return;
+
+      const existing = balances.find((b) => b.currency_id === currencyId);
+      const newAmount = Number(existing?.amount || 0) + rewardAmount;
+
+      if (existing?.id) {
+        await supabase
+          .from("balances")
+          .update({ amount: newAmount })
+          .eq("id", existing.id);
+      } else {
+        await supabase
+          .from("balances")
+          .insert({ user_id: userId, currency_id: currencyId, amount: rewardAmount });
+      }
+    } catch (e) {
+      console.warn("[DailyAds] direct balance credit failed:", e);
+    }
+  };
 
   const handleWatch = async () => {
     if (!userId || allDone || watching) return;
@@ -64,6 +97,7 @@ export function DailyAdsCard() {
         title: t("success"),
         description: `+${result.reward} ${currencySymbol}, +${result.xp} XP`,
       });
+      await creditBalanceDirectly(result.reward);
       await refreshUser();
     } catch (err: any) {
       hapticNotification("error");
@@ -99,6 +133,7 @@ export function DailyAdsCard() {
           disabled={allDone || watching}
           onClick={handleWatch}
           className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-8 text-xs font-semibold px-4 disabled:opacity-50"
+          data-testid="button-watch-ad"
         >
           {watching ? (
             countdown > 0 ? (
