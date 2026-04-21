@@ -38,49 +38,72 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Determine reward currency — read from ads_daily config, then TON, then first active
-    const symbol = ads.reward_currency_symbol || 'TON';
+    // Determine reward currency (case-insensitive lookup, with sensible fallback chain)
+    const requestedSymbol = String(ads.reward_currency_symbol || 'TON').trim();
     let currencyId: string | null = null;
+    let resolvedSymbol: string | null = null;
 
-    const { data: cur } = await supabase
-      .from('currencies')
-      .select('id')
-      .eq('symbol', symbol)
-      .eq('is_active', true)
-      .maybeSingle();
-    currencyId = cur?.id || null;
+    // Case-insensitive lookup of the configured symbol
+    {
+      const { data: cur } = await supabase
+        .from('currencies')
+        .select('id, symbol, is_active')
+        .ilike('symbol', requestedSymbol)
+        .limit(1)
+        .maybeSingle();
+      if (cur?.id) {
+        currencyId = cur.id;
+        resolvedSymbol = cur.symbol;
+        // Auto-activate if needed so user actually sees the balance
+        if (cur.is_active === false) {
+          await supabase.from('currencies').update({ is_active: true }).eq('id', cur.id);
+        }
+      }
+    }
 
-    // Fallback: use TON if configured symbol not found
-    if (!currencyId && symbol !== 'TON') {
+    // Fallback to TON if requested currency missing
+    if (!currencyId && requestedSymbol.toUpperCase() !== 'TON') {
       const { data: tonCur } = await supabase
         .from('currencies')
-        .select('id')
-        .eq('symbol', 'TON')
+        .select('id, symbol')
+        .ilike('symbol', 'TON')
         .eq('is_active', true)
         .maybeSingle();
-      currencyId = tonCur?.id || null;
+      if (tonCur?.id) { currencyId = tonCur.id; resolvedSymbol = tonCur.symbol; }
     }
 
     // Final fallback: first active currency
     if (!currencyId) {
       const { data: firstCur } = await supabase
         .from('currencies')
-        .select('id')
+        .select('id, symbol')
         .eq('is_active', true)
-        .order('id', { ascending: true })
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
-      currencyId = firstCur?.id || null;
+      if (firstCur?.id) { currencyId = firstCur.id; resolvedSymbol = firstCur.symbol; }
     }
 
-    // Insert ad watch (unique per user/date/slot)
+    if (!currencyId) {
+      return new Response(JSON.stringify({ error: 'No active currency configured' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const reward = Number(ads.reward_per_ad) || 0;
+    const xp = Number(ads.xp_per_ad) || 0;
+
+    // Insert ad watch (unique per user/date/slot).
+    // NOTE: a DB trigger (credit_balance_from_ad_watch) automatically credits
+    // the user's balance after this insert succeeds — do NOT credit again here
+    // or users will be paid double.
     const { error: insertErr } = await supabase.from('ad_watches').insert({
       user_id: userId,
       watch_date: today,
       slot_index: slotIndex,
-      reward_amount: ads.reward_per_ad,
+      reward_amount: reward,
       reward_currency_id: currencyId,
-      xp_reward: ads.xp_per_ad
+      xp_reward: xp
     });
 
     if (insertErr) {
@@ -90,40 +113,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Credit balance
-    if (currencyId && Number(ads.reward_per_ad) > 0) {
-      const reward = Number(ads.reward_per_ad);
-
-      // Get current balance
-      const { data: bal } = await supabase
+    // Safety net: if for some reason the trigger didn't credit (e.g. removed),
+    // ensure the balance row exists. Using ON CONFLICT DO NOTHING so we never
+    // double-credit when the trigger already ran.
+    if (reward > 0) {
+      await supabase
         .from('balances')
-        .select('id, amount')
-        .eq('user_id', userId)
-        .eq('currency_id', currencyId)
-        .maybeSingle();
-
-      const newAmount = Number(bal?.amount || 0) + reward;
-
-      if (bal?.id) {
-        // Row exists — update it
-        const { error: updErr } = await supabase
-          .from('balances')
-          .update({ amount: newAmount })
-          .eq('id', bal.id);
-        if (updErr) console.error('balance update error:', updErr);
-      } else {
-        // No row yet — insert one
-        const { error: insErr } = await supabase
-          .from('balances')
-          .insert({ user_id: userId, currency_id: currencyId, amount: reward });
-        if (insErr) console.error('balance insert error:', insErr);
-      }
-    } else {
-      console.warn('balance not credited — currencyId:', currencyId, 'reward_per_ad:', ads.reward_per_ad);
+        .upsert(
+          { user_id: userId, currency_id: currencyId, amount: 0 },
+          { onConflict: 'user_id,currency_id', ignoreDuplicates: true }
+        );
     }
 
     // Add XP
-    if (ads.xp_per_ad > 0) {
+    if (xp > 0) {
       const { data: u } = await supabase
         .from('users')
         .select('exp')
@@ -131,7 +134,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (u) {
-        const newExp = (Number(u.exp) || 0) + Number(ads.xp_per_ad);
+        const newExp = (Number(u.exp) || 0) + xp;
         await supabase
           .from('users')
           .update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 })
@@ -144,10 +147,10 @@ Deno.serve(async (req) => {
       user_id: userId,
       type: 'ad_watched',
       message: `Ad #${slotIndex + 1} watched`,
-      meta: { reward: ads.reward_per_ad, xp: ads.xp_per_ad }
+      meta: { reward, xp, symbol: resolvedSymbol }
     });
 
-    return new Response(JSON.stringify({ success: true, reward: ads.reward_per_ad, xp: ads.xp_per_ad }), {
+    return new Response(JSON.stringify({ success: true, reward, xp, symbol: resolvedSymbol }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (e) {

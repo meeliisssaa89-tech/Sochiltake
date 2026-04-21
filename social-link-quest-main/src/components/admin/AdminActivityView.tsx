@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useAppSettings, useUpdateSetting, useActivityFeed, useDeleteActivityItem } from "@/hooks/useSupabaseData";
+import { useAppSettings, useUpdateSetting, useActivityFeed, useDeleteActivityItem, useCurrencies } from "@/hooks/useSupabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -15,13 +15,18 @@ interface Achievement {
   desc_en: string;  desc_ar: string;
   goal_type: string; goal_value: number;
   reward_label: string; is_active: boolean;
+  reward_currency_id?: string | null;
+  reward_amount?: number;
+  xp_reward?: number;
 }
 
 const GOAL_TYPES = [
+  { value: "referrals",       label: "Invite Friends" },
+  { value: "ads_watched",     label: "Ads Watched (lifetime)" },
+  { value: "level",           label: "Reach Level" },
+  { value: "daily_logins",    label: "Daily Check-ins (lifetime)" },
+  { value: "checkin_streak",  label: "Check-in Streak (consecutive)" },
   { value: "tasks_completed", label: "Tasks Completed" },
-  { value: "referrals",       label: "Referrals" },
-  { value: "checkin_streak",  label: "Check-in Streak" },
-  { value: "ads_watched",     label: "Ads Watched" },
   { value: "spins",           label: "Spins" },
 ];
 
@@ -38,13 +43,15 @@ const TYPE_COLORS: Record<string, string> = {
 const emptyAch: Achievement = {
   id: crypto.randomUUID(),
   title_en: "", title_ar: "", desc_en: "", desc_ar: "",
-  goal_type: "tasks_completed", goal_value: 10,
-  reward_label: "1 USDT", is_active: true,
+  goal_type: "referrals", goal_value: 10,
+  reward_label: "", is_active: true,
+  reward_currency_id: null, reward_amount: 0, xp_reward: 0,
 };
 
 export function AdminActivityView() {
   const [tab, setTab] = useState<"achievements" | "feed">("achievements");
   const { data: settings } = useAppSettings();
+  const { data: currencies = [] } = useCurrencies();
   const update = useUpdateSetting();
   const { toast } = useToast();
 
@@ -172,9 +179,43 @@ export function AdminActivityView() {
                   <label className="text-[10px] text-muted-foreground">Goal Value</label>
                   <Input type="number" value={ach.goal_value} onChange={(e) => updateAch(ach.id, "goal_value", +e.target.value)} className="h-7 text-xs" />
                 </div>
-                <div className="col-span-2">
-                  <label className="text-[10px] text-muted-foreground">Reward Label (display only)</label>
-                  <Input value={ach.reward_label} onChange={(e) => updateAch(ach.id, "reward_label", e.target.value)} className="h-7 text-xs" placeholder="e.g. 5 USDT" />
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Reward Currency</label>
+                  <Select
+                    value={ach.reward_currency_id || "none"}
+                    onValueChange={(v) => updateAch(ach.id, "reward_currency_id", v === "none" ? null : v)}
+                  >
+                    <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— None —</SelectItem>
+                      {(currencies as any[]).map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name} ({c.symbol})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Reward Amount</label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={ach.reward_amount ?? 0}
+                    onChange={(e) => updateAch(ach.id, "reward_amount", +e.target.value)}
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">XP Reward</label>
+                  <Input
+                    type="number"
+                    value={ach.xp_reward ?? 0}
+                    onChange={(e) => updateAch(ach.id, "xp_reward", +e.target.value)}
+                    className="h-7 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Display Label (optional)</label>
+                  <Input value={ach.reward_label} onChange={(e) => updateAch(ach.id, "reward_label", e.target.value)} className="h-7 text-xs" placeholder="auto from amount + currency" />
                 </div>
               </div>
             </div>

@@ -10,10 +10,10 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Languages, ArrowUpRight, Loader2, X, ChevronDown, Wallet, RefreshCw, Link2Off } from "lucide-react";
+import { Languages, ArrowUpRight, Loader2, X, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLivePrices, getLiveRate } from "@/hooks/useLivePrices";
-import { useTonConnect, TON_ICON, USDT_ICON } from "@/hooks/useTonConnect";
+import { TON_ICON, USDT_ICON } from "@/hooks/useTonConnect";
 
 interface Token {
   id: string;
@@ -22,6 +22,8 @@ interface Token {
   icon_url: string | null;
   price_usd: number;
 }
+
+const HIDDEN_SYMBOLS = new Set(["POINT", "POINTS", "PTS", "PT"]);
 
 export function ProfilePage() {
   const { t, language, setLanguage } = useLanguage();
@@ -36,8 +38,6 @@ export function ProfilePage() {
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [showHistory, setShowHistory] = useState(false);
 
-  const tonWallet = useTonConnect();
-
   const { data: tokens = [] } = useQuery<Token[]>({
     queryKey: ["wallet-tokens"],
     queryFn: async () => {
@@ -48,13 +48,18 @@ export function ProfilePage() {
 
   const { data: livePrices } = useLivePrices();
 
-  const totalUsd = balances.reduce((sum, b) => {
+  // Hide internal "Points" currency from profile display
+  const visibleBalances = balances.filter(
+    (b) => b.currencies && !HIDDEN_SYMBOLS.has((b.currencies.symbol || "").toUpperCase())
+  );
+
+  const totalUsd = visibleBalances.reduce((sum, b) => {
     if (!b.currencies) return sum;
     const rate = getLiveRate(b.currencies.symbol, livePrices, Number(b.currencies.exchange_rate || 0));
     return sum + Number(b.amount) * rate;
   }, 0);
 
-  const selectedBalance = balances.find((b) => b.id === selectedBalanceId) || balances[0];
+  const selectedBalance = visibleBalances.find((b) => b.id === selectedBalanceId) || visibleBalances[0];
 
   const handleWithdraw = async () => {
     if (!user?.telegram_id || !selectedBalance) return;
@@ -165,10 +170,10 @@ export function ProfilePage() {
           <div>
             <p className="text-[11px] text-muted-foreground mb-1">{t("withdrawCurrency")}</p>
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-              {balances.map((b) => {
+              {visibleBalances.map((b) => {
                 if (!b.currencies) return null;
                 const cur = b.currencies as any;
-                const isSelected = (selectedBalanceId || balances[0]?.id) === b.id;
+                const isSelected = (selectedBalanceId || visibleBalances[0]?.id) === b.id;
                 return (
                   <button
                     key={b.id}
@@ -245,7 +250,7 @@ export function ProfilePage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
         <h3 className="font-semibold text-sm mb-2 px-1">{t("appBalances")}</h3>
         <div className="space-y-1.5">
-          {balances.map((b) => {
+          {visibleBalances.map((b) => {
             if (!b.currencies) return null;
             const cur = b.currencies as any;
             const liveRate = getLiveRate(cur.symbol, livePrices, Number(cur.exchange_rate || 0));
@@ -272,93 +277,6 @@ export function ProfilePage() {
             );
           })}
         </div>
-      </motion.div>
-
-      {/* TON Wallet Connection */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-        <div className="flex items-center justify-between mb-2 px-1">
-          <h3 className="font-semibold text-sm flex items-center gap-1.5">
-            <img src={TON_ICON} alt="TON" className="w-4 h-4 rounded-full" />
-            TON Wallet
-          </h3>
-          {tonWallet.connected && (
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={tonWallet.refreshBalance}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                title="Refresh"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${tonWallet.isLoading ? "animate-spin" : ""}`} />
-              </button>
-              <button
-                onClick={tonWallet.disconnect}
-                className="flex items-center gap-1 text-[10px] text-destructive hover:opacity-80 transition-opacity"
-                data-testid="btn-disconnect-ton"
-              >
-                <Link2Off className="w-3 h-3" /> Disconnect
-              </button>
-            </div>
-          )}
-        </div>
-
-        {tonWallet.connected ? (
-          <div className="glass-card rounded-xl p-3 space-y-2 border border-primary/10">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-              <p className="text-[10px] text-muted-foreground font-mono truncate">{tonWallet.shortAddress}</p>
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-3">
-                <img src={TON_ICON} alt="TON" className="w-8 h-8 rounded-full bg-secondary p-0.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Toncoin</p>
-                  <p className="text-[10px] text-muted-foreground">TON</p>
-                </div>
-                <div className="text-right">
-                  {tonWallet.isLoading ? (
-                    <div className="w-12 h-4 bg-secondary animate-pulse rounded" />
-                  ) : (
-                    <p className="text-sm font-semibold tabular-nums">{tonWallet.tonBalance.toFixed(4)}</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <img src={USDT_ICON} alt="USDT" className="w-8 h-8 rounded-full bg-secondary p-0.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Tether USD</p>
-                  <p className="text-[10px] text-muted-foreground">USDT</p>
-                </div>
-                <div className="text-right">
-                  {tonWallet.isLoading ? (
-                    <div className="w-12 h-4 bg-secondary animate-pulse rounded" />
-                  ) : (
-                    <p className="text-sm font-semibold tabular-nums">{tonWallet.usdtBalance.toFixed(2)}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={tonWallet.connect}
-            disabled={tonWallet.isLoading}
-            className="glass-card rounded-xl p-3 w-full flex items-center gap-3 border border-dashed border-primary/20 hover:border-primary/40 transition-colors"
-            data-testid="btn-connect-ton-wallet"
-          >
-            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              {tonWallet.isLoading ? (
-                <Loader2 className="w-4 h-4 text-primary animate-spin" />
-              ) : (
-                <Wallet className="w-4 h-4 text-primary" />
-              )}
-            </div>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-medium">Connect TON Wallet</p>
-              <p className="text-[10px] text-muted-foreground">Connect via Tonkeeper, TON Space & more</p>
-            </div>
-            <img src={TON_ICON} alt="TON" className="w-5 h-5 rounded-full opacity-60 shrink-0" />
-          </button>
-        )}
       </motion.div>
 
       {/* On-chain tokens */}

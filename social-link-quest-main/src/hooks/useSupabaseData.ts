@@ -644,6 +644,35 @@ export function useActivityFeed(userId?: string, limit = 40) {
   });
 }
 
+export function useUserAchievements(userId: string | undefined) {
+  return useQuery({
+    queryKey: ["user-achievements", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from("user_achievements" as any)
+        .select("*")
+        .eq("user_id", userId);
+      if (error) throw error;
+      return (data as any[]) || [];
+    },
+    enabled: !!userId,
+  });
+}
+
+export function useClaimAchievement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, achievementId }: { userId: string; achievementId: string }) =>
+      invokeFunction("claim-achievement", { userId, achievementId }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["user-achievements", v.userId] });
+      qc.invalidateQueries({ queryKey: ["balances", v.userId] });
+      qc.invalidateQueries({ queryKey: ["activity-feed"] });
+    },
+  });
+}
+
 export function useDeleteActivityItem() {
   const qc = useQueryClient();
   return useMutation({
