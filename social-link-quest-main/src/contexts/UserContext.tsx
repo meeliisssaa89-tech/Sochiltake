@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { ADMIN_PATH } from "@/lib/adminAuth";
 
 export interface User {
   telegram_id: string;
@@ -85,7 +86,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Allow demo mode only on the admin route (so admin panel works
         // outside Telegram for management). Everything else is blocked.
-        const isAdminRoute = window.location.pathname.startsWith("/admin");
+        const isAdminRoute = window.location.pathname.startsWith(ADMIN_PATH);
         if (!isAdminRoute) {
           setIsLoading(false);
           return;

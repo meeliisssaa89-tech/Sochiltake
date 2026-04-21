@@ -9,6 +9,7 @@ import Index from "./pages/Index.tsx";
 import { AdminPanel } from "./pages/AdminPanel.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import { AdsSdkInjector } from "./components/AdsSdkInjector";
+import { ADMIN_PATH } from "./lib/adminAuth";
 
 const queryClient = new QueryClient();
 
@@ -23,7 +24,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/admin" element={<AdminPanel />} />
+              <Route path={ADMIN_PATH} element={<AdminPanel />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

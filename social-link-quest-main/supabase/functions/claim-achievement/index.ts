@@ -105,8 +105,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Resolve reward currency (admin selects by id; fall back to symbol if provided)
+    // Resolve reward currency (admin selects by id; fall back to symbol if provided).
+    // Verify the id still exists — admins may have deleted that currency since
+    // the achievement was authored, which would break the user_achievements
+    // insert FK and surface as a confusing error to the user.
     let currencyId: string | null = ach.reward_currency_id || null;
+    if (currencyId) {
+      const { data: existing } = await supabase
+        .from('currencies').select('id').eq('id', currencyId).maybeSingle();
+      if (!existing) currencyId = null;
+    }
     if (!currencyId && ach.reward_currency_symbol) {
       const { data: cur } = await supabase
         .from('currencies')
@@ -130,8 +138,14 @@ Deno.serve(async (req) => {
         xp_reward: xpReward,
       });
     if (claimErr) {
-      const isDup = claimErr.message.includes('duplicate') || claimErr.code === '23505';
-      return new Response(JSON.stringify({ error: isDup ? 'Already claimed' : claimErr.message }), {
+      const isDup = (claimErr.message || '').includes('duplicate') || (claimErr as any).code === '23505';
+      const isFk  = (claimErr as any).code === '23503';
+      const msg = isDup
+        ? 'Already claimed'
+        : isFk
+          ? `Reward currency no longer exists. Ask the admin to fix this achievement.`
+          : (claimErr.message || 'Could not record claim');
+      return new Response(JSON.stringify({ error: msg, code: (claimErr as any).code }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }

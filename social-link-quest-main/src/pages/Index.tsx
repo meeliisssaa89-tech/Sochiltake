@@ -11,6 +11,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
 import { useAppSettings } from "@/hooks/useSupabaseData";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ADMIN_PATH } from "@/lib/adminAuth";
 
 const pages: Record<string, React.ComponentType> = {
   home: HomePage,
@@ -45,7 +46,7 @@ export default function Index() {
   // Telegram-only access guard (after all hooks).
   const isInTelegram = typeof window !== "undefined" && !!(window as any).Telegram?.WebApp?.initData;
   const botUsername = (settings?.bot_username as string) || "";
-  const isAdminRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+  const isAdminRoute = typeof window !== "undefined" && window.location.pathname.startsWith(ADMIN_PATH);
   if (!isInTelegram && !isAdminRoute) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center" dir={dir}>

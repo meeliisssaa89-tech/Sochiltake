@@ -1,8 +1,9 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAllUsers, useAllTasks, useCurrencies, usePlatformStats, useUploadImage, useUpdateCurrency, useCreateCurrency } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
+import { adminAction, signInWithGoogle, signOut } from "@/lib/adminAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,8 +33,99 @@ import {
 type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo" | "bot";
 
 export function AdminPanel() {
+  const [session, setSession] = useState<any>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [adminEmail, setAdminEmail] = useState<string>("");
+  const [authError, setAuthError] = useState<string>("");
+  const [signingIn, setSigningIn] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setIsAdmin(null);
+      setAdminEmail("");
+      return;
+    }
+    adminAction<{ ok: boolean; email: string }>("whoami")
+      .then((r) => { setIsAdmin(true); setAdminEmail(r.email); setAuthError(""); })
+      .catch((e) => { setIsAdmin(false); setAuthError(e.message); });
+  }, [session]);
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-5 text-center glass-card rounded-2xl p-6 border border-primary/10">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 mx-auto flex items-center justify-center">
+            <Shield className="w-7 h-7 text-primary" />
+          </div>
+          <div className="space-y-1">
+            <h1 className="text-lg font-bold">Admin sign-in</h1>
+            <p className="text-xs text-muted-foreground">Restricted area. Sign in with an authorised Google account to continue.</p>
+          </div>
+          <Button
+            className="w-full h-10 rounded-xl text-sm gap-2"
+            disabled={signingIn}
+            onClick={async () => {
+              setSigningIn(true);
+              try { await signInWithGoogle(); } catch (e: any) { setAuthError(e.message); }
+              finally { setSigningIn(false); }
+            }}
+          >
+            {signingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Continue with Google</>}
+          </Button>
+          {authError && <p className="text-[11px] text-destructive">{authError}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (isAdmin === false) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="w-full max-w-sm space-y-4 text-center glass-card rounded-2xl p-6 border border-destructive/30">
+          <div className="w-14 h-14 rounded-2xl bg-destructive/10 mx-auto flex items-center justify-center">
+            <Ban className="w-7 h-7 text-destructive" />
+          </div>
+          <h1 className="text-lg font-bold">Access denied</h1>
+          <p className="text-xs text-muted-foreground">{authError || "Your Google account is not on the admin allowlist."}</p>
+          <p className="text-[11px] text-muted-foreground break-all">Signed in as <b>{session.user?.email}</b></p>
+          <Button variant="outline" className="w-full h-9 rounded-xl text-xs" onClick={signOut}>Sign out</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAdmin === null) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return <AdminPanelInner adminEmail={adminEmail} />;
+}
+
+function AdminPanelInner({ adminEmail }: { adminEmail: string }) {
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState<AdminTab>("dashboard");
+  const [activeTab, setActiveTab] = useState<AdminTab | "admins">("dashboard");
   const [searchQuery, setSearchQuery] = useState("");
 
   const tabs = [
@@ -51,17 +143,22 @@ export function AdminPanel() {
     { id: "broadcast" as const, icon: Send, label: t("broadcast") },
     { id: "bot" as const, icon: Bot, label: t("bot") },
     { id: "settings" as const, icon: Settings, label: t("settings") },
+    { id: "admins" as const, icon: Shield, label: "Admin Access" },
   ];
 
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-50 bg-card/95 backdrop-blur-xl border-b border-border">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <a href="/" className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
+        <div className="flex items-center justify-between p-4 gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <a href="/" className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0">
               <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
             </a>
-            <h1 className="text-lg font-bold gradient-text-cyan">{t("admin")}</h1>
+            <h1 className="text-lg font-bold gradient-text-cyan truncate">{t("admin")}</h1>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-[10px] text-muted-foreground truncate max-w-[140px]" title={adminEmail}>{adminEmail}</span>
+            <Button size="sm" variant="outline" className="h-7 text-[10px] px-2 rounded-lg" onClick={signOut}>Sign out</Button>
           </div>
         </div>
         <div className="flex overflow-x-auto px-4 pb-2 gap-1 scrollbar-none">
@@ -97,6 +194,7 @@ export function AdminPanel() {
         {activeTab === "broadcast" && <AdminBroadcastView />}
         {activeTab === "bot" && <AdminBotView />}
         {activeTab === "settings" && <AdminSettingsView />}
+        {activeTab === "admins" && <AdminAccessView currentEmail={adminEmail} />}
       </div>
     </div>
   );
@@ -322,39 +420,42 @@ function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void 
   });
 
   const handleBan = async () => {
-    await supabase.from("users").update({ is_banned: !u.is_banned }).eq("telegram_id", u.telegram_id);
-    queryClient.invalidateQueries({ queryKey: ["all-users"] });
-    toast({ title: t("success") });
-    onClose();
+    try {
+      await adminAction("set_banned", { userId: u.telegram_id, banned: !u.is_banned });
+      queryClient.invalidateQueries({ queryKey: ["all-users"] });
+      toast({ title: t("success") });
+      onClose();
+    } catch (err: any) {
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
+    }
   };
 
   const handleAdjustBalance = async () => {
     if (!adjustCurrencyId || !adjustAmount) return;
     const amt = parseFloat(adjustAmount);
     if (isNaN(amt) || amt <= 0) return;
-    const balance = balances?.find((b: any) => b.currency_id === adjustCurrencyId);
-    if (!balance) return;
-    const newAmount = adjustMode === "add"
-      ? Number(balance.amount) + amt
-      : Math.max(0, Number(balance.amount) - amt);
-    const { error } = await supabase.from("balances").update({ amount: newAmount }).eq("id", balance.id);
-    if (error) {
-      toast({ title: t("error"), description: error.message, variant: "destructive" });
-      return;
+    try {
+      await adminAction("adjust_balance", {
+        userId: u.telegram_id,
+        currencyId: adjustCurrencyId,
+        amount: amt,
+        mode: adjustMode,
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-user-balances", u.telegram_id] });
+      queryClient.invalidateQueries({ queryKey: ["balances", u.telegram_id] });
+      queryClient.invalidateQueries({ queryKey: ["all-users"] });
+      toast({ title: t("success"), description: `${adjustMode === "add" ? "+" : "-"}${amt}` });
+      setAdjustAmount("");
+    } catch (err: any) {
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
     }
-    queryClient.invalidateQueries({ queryKey: ["admin-user-balances", u.telegram_id] });
-    queryClient.invalidateQueries({ queryKey: ["balances", u.telegram_id] });
-    queryClient.invalidateQueries({ queryKey: ["all-users"] });
-    toast({ title: t("success"), description: `${adjustMode === "add" ? "+" : "-"}${amt}` });
-    setAdjustAmount("");
   };
 
   const handleDelete = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setIsDeleting(true);
     try {
-      const { error } = await supabase.from("users").delete().eq("telegram_id", u.telegram_id);
-      if (error) throw error;
+      await adminAction("delete_user", { userId: u.telegram_id });
       queryClient.invalidateQueries({ queryKey: ["all-users"] });
       queryClient.invalidateQueries({ queryKey: ["platform-stats"] });
       toast({ title: "User deleted" });
@@ -991,3 +1092,113 @@ function CurrenciesView() {
   );
 }
 
+
+function AdminAccessView({ currentEmail }: { currentEmail: string }) {
+  const { toast } = useToast();
+  const [admins, setAdmins] = useState<Array<{ email: string; created_at: string }>>([]);
+  const [newEmail, setNewEmail] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const r = await adminAction<{ admins: any[] }>("list_admins");
+      setAdmins(r.admins || []);
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const add = async () => {
+    const email = newEmail.trim().toLowerCase();
+    if (!email) return;
+    setBusy(true);
+    try {
+      await adminAction("add_admin", { email });
+      setNewEmail("");
+      await refresh();
+      toast({ title: "Admin added" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (email: string) => {
+    if (!confirm(`Remove ${email} from admins?`)) return;
+    try {
+      await adminAction("remove_admin", { email });
+      await refresh();
+      toast({ title: "Admin removed" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="glass-card rounded-2xl p-4 space-y-2 border border-primary/10">
+        <div className="flex items-center gap-2">
+          <Shield className="w-4 h-4 text-primary" />
+          <h2 className="font-semibold text-sm">Admin allowlist</h2>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Only Google accounts in this list can sign into the admin panel. You are signed in as <b>{currentEmail}</b>.
+        </p>
+      </div>
+
+      <div className="glass-card rounded-2xl p-3 space-y-2">
+        <p className="text-xs font-semibold">Add admin email</p>
+        <div className="flex gap-2">
+          <Input
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            placeholder="person@gmail.com"
+            className="h-9 text-xs rounded-xl"
+            type="email"
+          />
+          <Button size="sm" onClick={add} disabled={busy || !newEmail.trim()} className="rounded-xl h-9 text-xs px-4">
+            {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-semibold px-1">Authorised admins</p>
+        {loading ? (
+          <Skeleton className="h-12 rounded-xl" />
+        ) : admins.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground text-center py-4">No admins yet</p>
+        ) : (
+          admins.map((a) => (
+            <div key={a.email} className="glass-card rounded-xl p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <Shield className="w-4 h-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{a.email}</p>
+                <p className="text-[10px] text-muted-foreground">
+                  added {new Date(a.created_at).toLocaleDateString()}
+                  {a.email === currentEmail && <span className="ms-1 text-primary">• you</span>}
+                </p>
+              </div>
+              {a.email !== currentEmail && (
+                <Button
+                  size="sm" variant="outline"
+                  className="h-7 text-[10px] rounded-lg border-destructive/30 text-destructive"
+                  onClick={() => remove(a.email)}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
