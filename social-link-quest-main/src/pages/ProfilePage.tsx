@@ -189,7 +189,7 @@ export function ProfilePage() {
                       <span className="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold">{cur.symbol[0]}</span>
                     )}
                     {cur.symbol}
-                    <span className="text-[10px] opacity-70">({Number(b.amount).toLocaleString()})</span>
+                    <span className="text-[10px] opacity-70">({Number(b.amount).toFixed(2)})</span>
                   </button>
                 );
               })}
@@ -270,7 +270,7 @@ export function ProfilePage() {
                   <p className="text-[10px] text-muted-foreground">{cur.symbol}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-semibold tabular-nums">{Number(b.amount).toLocaleString()}</p>
+                  <p className="text-sm font-semibold tabular-nums">{Number(b.amount).toFixed(2)}</p>
                   <p className="text-[10px] text-muted-foreground">${usdValue.toFixed(2)}</p>
                 </div>
               </div>

@@ -47,7 +47,7 @@ export function HomePage() {
     {
       iconEl: <img src={tonCurrency?.icon_url || TON_ICON} alt="TON" className="w-5 h-5 mx-auto mb-1 rounded-full object-contain" />,
       label: t("totalCoins"),
-      value: `${Number(tonBalance).toLocaleString()} TON`,
+      value: `${Number(tonBalance).toFixed(2)} TON`,
     },
     {
       iconEl: <img src={usdtCurrency?.icon_url || USDT_ICON} alt="USDT" className="w-5 h-5 mx-auto mb-1 rounded-full object-contain" />,

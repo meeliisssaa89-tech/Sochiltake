@@ -2,7 +2,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
-import { useLeaderboard, usePlatformStats, useReferrals, useUserTasks, useRedeemPromoCode } from "@/hooks/useSupabaseData";
+import { useLeaderboard, usePlatformStats, useReferrals, useUserTasks, useRedeemPromoCode, useAppSettings } from "@/hooks/useSupabaseData";
+import { shareUrl as tgShareUrl } from "@/lib/telegram";
 import { useAdTrigger } from "@/hooks/useAdTrigger";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -28,21 +29,31 @@ export function LeaderboardPage() {
   const { data: stats } = usePlatformStats();
   const { data: referralData } = useReferrals(user?.telegram_id);
   const { data: userTasks } = useUserTasks(user?.telegram_id);
+  const { data: settings } = useAppSettings();
 
   const myRank = leaderboard?.findIndex((e) => e.userId === user?.telegram_id) ?? -1;
   const myScore = myRank >= 0 ? leaderboard![myRank].score : 0;
 
-  const botUsername = "CyberPulseBot";
-  const referralLink = `https://t.me/${botUsername}?start=ref_${user?.telegram_id}`;
+  const botUsername = ((settings?.bot_username as string) || "").replace(/^@/, "").trim();
+  const referralLink = botUsername && user?.telegram_id
+    ? `https://t.me/${botUsername}?startapp=ref_${user.telegram_id}`
+    : "";
 
   const copyLink = () => {
+    if (!referralLink) {
+      toast({ title: t("error"), description: "Bot username not configured", variant: "destructive" });
+      return;
+    }
     navigator.clipboard.writeText(referralLink);
-    toast({ title: t("copied") });
+    toast({ title: t("copied"), description: referralLink });
   };
 
   const shareOnTelegram = () => {
-    const text = encodeURIComponent("Join CyberPulse and earn rewards! 🚀");
-    window.open(`https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${text}`, "_blank");
+    if (!referralLink) {
+      toast({ title: t("error"), description: "Bot username not configured", variant: "destructive" });
+      return;
+    }
+    tgShareUrl(referralLink, "Join and earn rewards! 🚀");
   };
 
   const handleRedeem = async () => {

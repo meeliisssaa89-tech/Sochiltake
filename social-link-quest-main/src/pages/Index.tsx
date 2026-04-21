@@ -46,7 +46,7 @@ export default function Index() {
   const isInTelegram = typeof window !== "undefined" && !!(window as any).Telegram?.WebApp?.initData;
   const botUsername = (settings?.bot_username as string) || "";
   const isAdminRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
-  if (!isLoading && !isInTelegram && !user && !isAdminRoute) {
+  if (!isInTelegram && !isAdminRoute) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center" dir={dir}>
         <div className="space-y-4 max-w-sm">

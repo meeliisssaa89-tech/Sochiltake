@@ -243,7 +243,7 @@ function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void 
   const { data: balances } = useQuery({
     queryKey: ["admin-user-balances", u.telegram_id],
     queryFn: async () => {
-      const { data } = await supabase.from("user_balances").select("*, currencies(*)").eq("user_id", u.telegram_id);
+      const { data } = await supabase.from("balances").select("*, currencies(*)").eq("user_id", u.telegram_id);
       return data || [];
     },
   });
@@ -337,8 +337,14 @@ function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void 
     const newAmount = adjustMode === "add"
       ? Number(balance.amount) + amt
       : Math.max(0, Number(balance.amount) - amt);
-    await supabase.from("user_balances").update({ amount: newAmount }).eq("id", balance.id);
+    const { error } = await supabase.from("balances").update({ amount: newAmount }).eq("id", balance.id);
+    if (error) {
+      toast({ title: t("error"), description: error.message, variant: "destructive" });
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ["admin-user-balances", u.telegram_id] });
+    queryClient.invalidateQueries({ queryKey: ["balances", u.telegram_id] });
+    queryClient.invalidateQueries({ queryKey: ["all-users"] });
     toast({ title: t("success"), description: `${adjustMode === "add" ? "+" : "-"}${amt}` });
     setAdjustAmount("");
   };
@@ -435,7 +441,7 @@ function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void 
                       <p className="text-sm font-medium">{cur?.name}</p>
                       <p className="text-[10px] text-muted-foreground">{cur?.symbol}</p>
                     </div>
-                    <p className="text-sm font-bold tabular-nums">{Number(b.amount).toLocaleString()}</p>
+                    <p className="text-sm font-bold tabular-nums">{Number(b.amount).toFixed(2)}</p>
                   </div>
                 );
               })}
