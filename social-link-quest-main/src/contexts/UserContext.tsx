@@ -83,6 +83,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         const startParam = tgWebApp.initDataUnsafe?.start_param || null;
         data = await callAuth({ initData, startParam });
       } else {
+        // Allow demo mode only on the admin route (so admin panel works
+        // outside Telegram for management). Everything else is blocked.
+        const isAdminRoute = window.location.pathname.startsWith("/admin");
+        if (!isAdminRoute) {
+          setIsLoading(false);
+          return;
+        }
         data = await callAuth({ demo: true });
       }
 

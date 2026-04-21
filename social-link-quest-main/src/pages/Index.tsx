@@ -23,7 +23,7 @@ const pages: Record<string, React.ComponentType> = {
 export default function Index() {
   const [activeTab, setActiveTab] = useState("home");
   const { dir } = useLanguage();
-  const { isLoading } = useUser();
+  const { isLoading, user } = useUser();
   const { data: settings } = useAppSettings();
   const Page = pages[activeTab] || HomePage;
 
@@ -41,6 +41,31 @@ export default function Index() {
 
   const logoUrl = settings?.app_logo_url;
   const hasLogo = logoUrl && typeof logoUrl === "string" && logoUrl !== "null" && logoUrl.trim() !== "";
+
+  // Telegram-only access guard (after all hooks).
+  const isInTelegram = typeof window !== "undefined" && !!(window as any).Telegram?.WebApp?.initData;
+  const botUsername = (settings?.bot_username as string) || "";
+  const isAdminRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+  if (!isLoading && !isInTelegram && !user && !isAdminRoute) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center" dir={dir}>
+        <div className="space-y-4 max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 mx-auto flex items-center justify-center text-3xl">📱</div>
+          <h1 className="text-xl font-bold">افتح التطبيق من تيليجرام</h1>
+          <p className="text-sm text-muted-foreground">Open this Mini App inside Telegram to continue.</p>
+          {botUsername && (
+            <a
+              href={`https://t.me/${botUsername}`}
+              className="inline-block px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold"
+              data-testid="link-open-telegram"
+            >
+              Open in Telegram
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

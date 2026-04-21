@@ -119,6 +119,11 @@ export function HomePage() {
               <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                 <Flame className="w-3 h-3 text-accent" />
                 {checkinLoading ? "..." : checkinData?.streak || 0} {t("streak")}
+                {checkinData?.nextReward ? (
+                  <span className="ms-1 text-accent font-semibold">
+                    • +{checkinData.nextReward} {checkinData.currencySymbol}
+                  </span>
+                ) : null}
               </p>
             </div>
           </div>

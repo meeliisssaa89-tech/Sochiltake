@@ -261,6 +261,66 @@ function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void 
     },
   });
 
+  // ── Forensics: lifetime activity counts to spot abuse ───────────────
+  const { data: forensics } = useQuery({
+    queryKey: ["admin-user-forensics", u.telegram_id],
+    queryFn: async () => {
+      const uid = u.telegram_id;
+      const todayStr = new Date().toISOString().split("T")[0];
+      const since7 = new Date(Date.now() - 7 * 86400000).toISOString();
+
+      const [
+        adsAll, adsToday, adsWeek,
+        tasksAll, tasksToday,
+        refsAll, refsToday,
+        checkinsAll,
+        spinsAll, spinsToday,
+        withdrawalsAll,
+        recentAds,
+        recentReferrals,
+      ] = await Promise.all([
+        supabase.from("ad_watches").select("id", { count: "exact", head: true }).eq("user_id", uid),
+        supabase.from("ad_watches").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("watch_date", todayStr),
+        supabase.from("ad_watches").select("id", { count: "exact", head: true }).eq("user_id", uid).gte("created_at", since7),
+        supabase.from("user_tasks").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("status", "completed"),
+        supabase.from("user_tasks").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("status", "completed").gte("created_at", todayStr),
+        supabase.from("referrals").select("id", { count: "exact", head: true }).eq("inviter_id", uid),
+        supabase.from("referrals").select("id", { count: "exact", head: true }).eq("inviter_id", uid).gte("created_at", todayStr),
+        supabase.from("daily_checkins").select("id", { count: "exact", head: true }).eq("user_id", uid),
+        supabase.from("spin_history").select("id", { count: "exact", head: true }).eq("user_id", uid),
+        supabase.from("spin_history").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("spin_date", todayStr),
+        supabase.from("withdrawals").select("id, amount, status, created_at, currencies(symbol)").eq("user_id", uid).order("created_at", { ascending: false }).limit(20),
+        supabase.from("ad_watches").select("created_at, slot_index, reward_amount").eq("user_id", uid).order("created_at", { ascending: false }).limit(20),
+        supabase.from("referrals").select("invitee_id, created_at, users!referrals_invitee_id_fkey(first_name, username, telegram_id, created_at)").eq("inviter_id", uid).order("created_at", { ascending: false }).limit(20),
+      ]);
+
+      // Detect suspicious patterns: many referrals on the same day with brand-new accounts.
+      const refRows: any[] = (recentReferrals.data as any) || [];
+      const sameDayRefs = refRows.filter((r) => {
+        const inviteeCreated = r.users?.created_at;
+        if (!inviteeCreated) return false;
+        return Math.abs(new Date(r.created_at).getTime() - new Date(inviteeCreated).getTime()) < 5 * 60_000;
+      }).length;
+
+      return {
+        adsAll: adsAll.count || 0,
+        adsToday: adsToday.count || 0,
+        adsWeek: adsWeek.count || 0,
+        tasksAll: tasksAll.count || 0,
+        tasksToday: tasksToday.count || 0,
+        refsAll: refsAll.count || 0,
+        refsToday: refsToday.count || 0,
+        checkinsAll: checkinsAll.count || 0,
+        spinsAll: spinsAll.count || 0,
+        spinsToday: spinsToday.count || 0,
+        withdrawals: (withdrawalsAll.data as any[]) || [],
+        recentAds: (recentAds.data as any[]) || [],
+        recentReferrals: refRows,
+        sameDayRefs,
+      };
+    },
+  });
+
   const handleBan = async () => {
     await supabase.from("users").update({ is_banned: !u.is_banned }).eq("telegram_id", u.telegram_id);
     queryClient.invalidateQueries({ queryKey: ["all-users"] });
@@ -286,10 +346,18 @@ function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void 
   const handleDelete = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
     setIsDeleting(true);
-    await supabase.from("users").delete().eq("telegram_id", u.telegram_id);
-    queryClient.invalidateQueries({ queryKey: ["all-users"] });
-    toast({ title: "User deleted" });
-    onClose();
+    try {
+      const { error } = await supabase.from("users").delete().eq("telegram_id", u.telegram_id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["all-users"] });
+      queryClient.invalidateQueries({ queryKey: ["platform-stats"] });
+      toast({ title: "User deleted" });
+      onClose();
+    } catch (err: any) {
+      toast({ title: t("error"), description: err.message || "Delete failed", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -424,6 +492,107 @@ function UserDetailModal({ user: u, onClose }: { user: any; onClose: () => void 
                 Apply
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* ── Activity forensics ── */}
+        {forensics && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold">Activity Forensics</p>
+            <div className="grid grid-cols-3 gap-1.5 text-center">
+              <div className="glass-card rounded-lg p-2">
+                <p className="text-sm font-bold tabular-nums text-primary">{forensics.tasksAll}</p>
+                <p className="text-[8px] text-muted-foreground">Tasks (today {forensics.tasksToday})</p>
+              </div>
+              <div className="glass-card rounded-lg p-2">
+                <p className="text-sm font-bold tabular-nums text-yellow-500">{forensics.adsAll}</p>
+                <p className="text-[8px] text-muted-foreground">Ads (today {forensics.adsToday} • 7d {forensics.adsWeek})</p>
+              </div>
+              <div className="glass-card rounded-lg p-2">
+                <p className="text-sm font-bold tabular-nums text-blue-400">{forensics.refsAll}</p>
+                <p className="text-[8px] text-muted-foreground">Refs (today {forensics.refsToday})</p>
+              </div>
+              <div className="glass-card rounded-lg p-2">
+                <p className="text-sm font-bold tabular-nums text-orange-400">{forensics.checkinsAll}</p>
+                <p className="text-[8px] text-muted-foreground">Check-ins</p>
+              </div>
+              <div className="glass-card rounded-lg p-2">
+                <p className="text-sm font-bold tabular-nums text-accent">{forensics.spinsAll}</p>
+                <p className="text-[8px] text-muted-foreground">Spins (today {forensics.spinsToday})</p>
+              </div>
+              <div className="glass-card rounded-lg p-2">
+                <p className="text-sm font-bold tabular-nums text-purple-400">{forensics.withdrawals.length}</p>
+                <p className="text-[8px] text-muted-foreground">Withdraw req.</p>
+              </div>
+            </div>
+
+            {/* Abuse warnings */}
+            {(forensics.sameDayRefs >= 3 || forensics.adsToday > 50 || forensics.refsToday > 20) && (
+              <div className="rounded-lg p-2 bg-destructive/10 border border-destructive/30 text-[10px] text-destructive space-y-0.5">
+                <p className="font-semibold">⚠ Suspicious activity</p>
+                {forensics.sameDayRefs >= 3 && (
+                  <p>• {forensics.sameDayRefs} referrals where the invitee account was created within minutes of being invited.</p>
+                )}
+                {forensics.adsToday > 50 && <p>• Unusually high ad watches today ({forensics.adsToday}).</p>}
+                {forensics.refsToday > 20 && <p>• Unusually high referrals today ({forensics.refsToday}).</p>}
+              </div>
+            )}
+
+            {/* Recent referrals */}
+            {forensics.recentReferrals.length > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1">Recent referrals</p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {forensics.recentReferrals.map((r: any, i: number) => {
+                    const inv = r.users;
+                    const fast = inv?.created_at && Math.abs(new Date(r.created_at).getTime() - new Date(inv.created_at).getTime()) < 5 * 60_000;
+                    return (
+                      <div key={i} className={`flex items-center gap-2 py-1 px-2 rounded text-[10px] ${fast ? "bg-destructive/10" : "bg-secondary/40"}`}>
+                        <span className="flex-1 truncate">{inv?.first_name || inv?.username || r.invitee_id}</span>
+                        <span className="text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</span>
+                        {fast && <span className="text-destructive">⚡fast</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Recent withdrawals */}
+            {forensics.withdrawals.length > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1">Withdrawals</p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {forensics.withdrawals.map((w: any) => (
+                    <div key={w.id} className="flex items-center gap-2 py-1 px-2 rounded text-[10px] bg-secondary/40">
+                      <span className="flex-1">{Number(w.amount)} {w.currencies?.symbol || ""}</span>
+                      <span className={`px-1.5 rounded ${
+                        w.status === "approved" ? "bg-success/20 text-success" :
+                        w.status === "rejected" ? "bg-destructive/20 text-destructive" :
+                        "bg-yellow-500/20 text-yellow-600"
+                      }`}>{w.status}</span>
+                      <span className="text-muted-foreground">{new Date(w.created_at).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recent ad timeline (anti-fraud signal) */}
+            {forensics.recentAds.length > 0 && (
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1">Last ads watched</p>
+                <div className="space-y-0.5 max-h-28 overflow-y-auto">
+                  {forensics.recentAds.map((a: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 py-0.5 px-2 rounded text-[10px] bg-secondary/40">
+                      <span className="flex-1">slot #{a.slot_index}</span>
+                      <span className="text-accent">+{Number(a.reward_amount)}</span>
+                      <span className="text-muted-foreground">{new Date(a.created_at).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -762,6 +931,52 @@ function CurrenciesView() {
                 checked={c.is_active}
                 onCheckedChange={() => toggleActive(c.id, c.is_active)}
               />
+            </div>
+
+            {/* Withdrawal rules */}
+            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/40">
+              <div>
+                <label className="text-[9px] text-muted-foreground">Min withdraw</label>
+                <Input
+                  type="number"
+                  step="any"
+                  defaultValue={(c as any).min_withdraw_amount ?? 0}
+                  onBlur={async (e) => {
+                    await updateCurrency.mutateAsync({ id: c.id, data: { min_withdraw_amount: +e.target.value } as any });
+                    toast({ title: t("success") });
+                  }}
+                  className="h-7 text-xs mt-0.5"
+                  data-testid={`input-min-${c.id}`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] text-muted-foreground">Max withdraw (0 = none)</label>
+                <Input
+                  type="number"
+                  step="any"
+                  defaultValue={(c as any).max_withdraw_amount ?? 0}
+                  onBlur={async (e) => {
+                    const v = +e.target.value;
+                    await updateCurrency.mutateAsync({ id: c.id, data: { max_withdraw_amount: v > 0 ? v : null } as any });
+                    toast({ title: t("success") });
+                  }}
+                  className="h-7 text-xs mt-0.5"
+                  data-testid={`input-max-${c.id}`}
+                />
+              </div>
+              <div>
+                <label className="text-[9px] text-muted-foreground">Required referrals</label>
+                <Input
+                  type="number"
+                  defaultValue={(c as any).required_referrals ?? 0}
+                  onBlur={async (e) => {
+                    await updateCurrency.mutateAsync({ id: c.id, data: { required_referrals: +e.target.value } as any });
+                    toast({ title: t("success") });
+                  }}
+                  className="h-7 text-xs mt-0.5"
+                  data-testid={`input-refs-${c.id}`}
+                />
+              </div>
             </div>
           </div>
         ))

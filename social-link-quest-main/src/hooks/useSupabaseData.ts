@@ -89,7 +89,31 @@ export function useCheckinStatus(userId: string | undefined) {
         .order("check_in_date", { ascending: false })
         .limit(1)
         .maybeSingle();
-      return { claimedToday: !!todayCheckin, streak: lastCheckin?.streak_count || 0, lastCheckin };
+
+      // Next-up reward (preview): admin-configured rewards & currency
+      const { data: settingsRows } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["checkin_rewards", "checkin_currency_symbol"]);
+      const settings: Record<string, any> = {};
+      (settingsRows || []).forEach((r: any) => { settings[r.key] = r.value; });
+      const days: number[] = Array.isArray(settings.checkin_rewards?.days)
+        ? settings.checkin_rewards.days : [50, 100, 150, 200, 250, 300, 500];
+      const nextStreak = todayCheckin
+        ? lastCheckin?.streak_count || 0
+        : (lastCheckin?.streak_count || 0) + 1;
+      const previewDay = ((Math.max(nextStreak, 1) - 1) % 7) + 1;
+      const nextReward = Number(days[previewDay - 1] ?? days[0] ?? 50);
+      const currencySymbol = (settings.checkin_currency_symbol || "TON").toString();
+
+      return {
+        claimedToday: !!todayCheckin,
+        streak: lastCheckin?.streak_count || 0,
+        lastCheckin,
+        nextReward,
+        currencySymbol,
+        rewardDays: days,
+      };
     },
     enabled: !!userId,
   });
@@ -351,6 +375,33 @@ export function useCreateWithdrawal() {
       walletAddress: string;
       balanceId: string;
     }) => {
+      // Pull currency rules
+      const { data: cur, error: curErr } = await supabase
+        .from("currencies")
+        .select("min_withdraw_amount, max_withdraw_amount, required_referrals, symbol")
+        .eq("id", currencyId)
+        .single();
+      if (curErr) throw curErr;
+      const minA = Number(cur.min_withdraw_amount || 0);
+      const maxA = cur.max_withdraw_amount != null ? Number(cur.max_withdraw_amount) : null;
+      const needRefs = Number(cur.required_referrals || 0);
+
+      if (minA > 0 && amount < minA) {
+        throw new Error(`Minimum withdrawal is ${minA} ${cur.symbol}`);
+      }
+      if (maxA && maxA > 0 && amount > maxA) {
+        throw new Error(`Maximum withdrawal is ${maxA} ${cur.symbol}`);
+      }
+      if (needRefs > 0) {
+        const { count } = await supabase
+          .from("referrals")
+          .select("id", { count: "exact", head: true })
+          .eq("inviter_id", userId);
+        if ((count || 0) < needRefs) {
+          throw new Error(`You need ${needRefs} referrals (you have ${count || 0})`);
+        }
+      }
+
       // Deduct from balance first
       const { data: bal, error: balErr } = await supabase
         .from("balances")
@@ -427,7 +478,7 @@ export function useRejectWithdrawal() {
 export function useUpdateCurrency() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { icon_url?: string | null; name?: string; exchange_rate?: number } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, any> }) => {
       const { error } = await supabase.from("currencies").update(data).eq("id", id);
       if (error) throw error;
     },
