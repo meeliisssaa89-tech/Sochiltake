@@ -70,15 +70,14 @@ export function useAdTrigger() {
   const triggerAllAdgram = async (cfg: PlatformConfig): Promise<boolean> => {
     const blockIds = getAllBlockIds(cfg);
     if (blockIds.length === 0) return false;
-    let anyOk = false;
-    for (let i = 0; i < blockIds.length; i++) {
-      const bid = blockIds[i];
-      console.log(`[Adsgram] [${i + 1}/${blockIds.length}] blockId: ${bid}${cfg.debug ? " (debug)" : ""}`);
-      const ok = await triggerAdgram(bid, cfg.debug || false);
-      if (ok) anyOk = true;
-      else console.warn(`[Adsgram] blockId ${bid} failed, continuing...`);
-    }
-    return anyOk;
+    console.log(`[Adsgram] triggering ${blockIds.length} block ID(s) simultaneously${cfg.debug ? " (debug)" : ""}`);
+    const results = await Promise.all(
+      blockIds.map((bid, i) => {
+        console.log(`[Adsgram] [${i + 1}/${blockIds.length}] blockId: ${bid}`);
+        return triggerAdgram(bid, cfg.debug || false);
+      })
+    );
+    return results.some(Boolean);
   };
 
   const triggerMontag = async (zoneId: string): Promise<boolean> => {
@@ -179,7 +178,7 @@ export function useAdTrigger() {
       if (adgramCfg?.enabled) {
         const ids = getAllBlockIds(adgramCfg);
         if (ids.length > 0) {
-          console.log(`[Ads] Adgram → triggering ${ids.length} block ID(s) in sequence...`);
+          console.log(`[Ads] Adgram → triggering ${ids.length} block ID(s) simultaneously...`);
           const ok = await triggerAllAdgram(adgramCfg);
           if (ok) totalShown++;
           else console.warn("[Ads] All Adgram block IDs failed, continuing to Monetag...");

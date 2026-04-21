@@ -220,7 +220,7 @@ export function AdminAdsView() {
                           <label className="text-[10px] text-muted-foreground font-medium">
                             Block IDs
                             <span className="ms-1 text-[9px] text-muted-foreground/60">
-                              (each ad slot rotates through these)
+                              (all triggered simultaneously)
                             </span>
                           </label>
                           <Button
@@ -264,7 +264,7 @@ export function AdminAdsView() {
                         {(cfg.block_ids || []).length > 1 && (
                           <div className="bg-blue-500/10 border border-blue-500/20 rounded p-2">
                             <p className="text-[9px] text-blue-400">
-                              <strong>كيف يعمل:</strong> عند الضغط على الزر يتم عرض <strong>جميع</strong> Block IDs بالتسلسل (الأول ثم الثاني ثم الثالث...) في نفس الجلسة قبل إعطاء المكافأة.
+                              <strong>كيف يعمل:</strong> عند الضغط على الزر يتم استدعاء <strong>جميع</strong> Block IDs في نفس الوقت معاً (بالتوازي) وتظهر كلها دفعة واحدة.
                             </p>
                           </div>
                         )}
