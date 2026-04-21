@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Ensure user has default currency balances
+    // Ensure user has default currency balances (only insert if not already exists — never overwrite existing amounts)
     const { data: currencies } = await supabase
       .from('currencies')
       .select('id')
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
             user_id: telegramId,
             currency_id: currency.id,
             amount: 0,
-          }, { onConflict: 'user_id,currency_id' });
+          }, { onConflict: 'user_id,currency_id', ignoreDuplicates: true });
       }
     }
 

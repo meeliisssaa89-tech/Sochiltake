@@ -135,6 +135,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.telegram_id]);
 
+  // Realtime: keep user exp/level fresh whenever tasks are completed or XP is granted
+  useEffect(() => {
+    if (!user?.telegram_id) return;
+    const ch = supabase
+      .channel(`users-${user.telegram_id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "users", filter: `telegram_id=eq.${user.telegram_id}` },
+        ({ new: updated }) => {
+          if (updated) setUser(updated as User);
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [user?.telegram_id]);
+
   return (
     <UserContext.Provider value={{ user, setUser, isLoading, isAdmin, balances, refreshUser }}>
       {children}
