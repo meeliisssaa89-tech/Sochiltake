@@ -193,7 +193,7 @@ export function AdminAdsView() {
           <Zap className="w-4 h-4 text-accent" /> Ad Platforms
         </h3>
         <p className="text-[10px] text-muted-foreground">
-          Enable each platform. When "All Platforms" is selected, Adgram runs first then Monetag sequentially before the reward is given.
+          Enable each platform. When "All Platforms" is selected, Monetag runs first then Adgram sequentially before the reward is given.
         </p>
         {PLATFORMS.map(({ key, label, desc, color }) => {
           const cfg = platforms[key] || { ...defaultPlatform };
@@ -358,7 +358,7 @@ export function AdminAdsView() {
           <Link2 className="w-4 h-4 text-primary" /> Button Bindings
         </h3>
         <p className="text-[10px] text-muted-foreground">
-          Choose which ad platform each button triggers. Use <strong>All Platforms</strong> to run Adgram then Monetag in sequence.
+          Choose which ad platform each button triggers. Use <strong>All Platforms</strong> to run Monetag then Adgram in sequence.
         </p>
         {BUTTON_SLOTS.map(({ key, label }) => (
           <div key={key}>

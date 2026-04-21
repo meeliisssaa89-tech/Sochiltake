@@ -175,17 +175,6 @@ export function useAdTrigger() {
     if (platform === "all") {
       let totalShown = 0;
 
-      const adgramCfg = platforms.adgram;
-      if (adgramCfg?.enabled) {
-        const ids = getAllBlockIds(adgramCfg);
-        if (ids.length > 0) {
-          console.log(`[Ads] Adgram → triggering ${ids.length} block ID(s) in sequence...`);
-          const ok = await triggerAllAdgram(adgramCfg);
-          if (ok) totalShown++;
-          else console.warn("[Ads] All Adgram block IDs failed, continuing to Monetag...");
-        }
-      }
-
       const montagCfg = platforms.montag;
       if (montagCfg?.enabled && montagCfg.zone_id) {
         console.log("[Ads] Monetag → zoneId:", montagCfg.zone_id);
@@ -197,6 +186,17 @@ export function useAdTrigger() {
           console.warn("[Ads] Monetag JS trigger not found — waiting timer for Monetag slot");
           await timerFallback(adsConfig.duration_seconds || 15);
           totalShown++;
+        }
+      }
+
+      const adgramCfg = platforms.adgram;
+      if (adgramCfg?.enabled) {
+        const ids = getAllBlockIds(adgramCfg);
+        if (ids.length > 0) {
+          console.log(`[Ads] Adgram → triggering ${ids.length} block ID(s) in sequence...`);
+          const ok = await triggerAllAdgram(adgramCfg);
+          if (ok) totalShown++;
+          else console.warn("[Ads] All Adgram block IDs failed.");
         }
       }
 
