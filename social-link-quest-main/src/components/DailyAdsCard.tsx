@@ -5,7 +5,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useAdsToday, useWatchAd, useCurrencies } from "@/hooks/useSupabaseData";
+import { useAdsToday, useWatchAd, useCurrencies, useAppSettings } from "@/hooks/useSupabaseData";
+import { AppIcon } from "@/components/AppIcon";
 import { useAdTrigger } from "@/hooks/useAdTrigger";
 import { hapticImpact, hapticNotification } from "@/lib/telegram";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +19,8 @@ export function DailyAdsCard() {
 
   const { triggerAd, isConfigured, adsConfig } = useAdTrigger();
   const { data: currencies } = useCurrencies();
+  const { data: settings } = useAppSettings();
+  const sectionIcons = (settings?.app_icons || {}) as Record<string, string>;
   const { data: watchedToday = [] } = useAdsToday(userId);
   const watchMutation = useWatchAd();
 
@@ -117,8 +120,8 @@ export function DailyAdsCard() {
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Eye className="w-4 h-4 text-primary" />
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
+            <AppIcon src={sectionIcons.section_ads} fallback={Eye} size={16} className="w-4 h-4 text-primary object-contain" />
           </div>
           <div>
             <h3 className="font-semibold text-sm">{t("dailyAds")}</h3>
