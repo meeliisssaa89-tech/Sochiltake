@@ -37,12 +37,25 @@ Located in `social-link-quest-main/.env`:
 - `VITE_SUPABASE_PUBLISHABLE_KEY` - Supabase anon key
 - `VITE_SUPABASE_PROJECT_ID` - Supabase project ID
 
+## Currency System
+The app uses a multi-currency system based on Supabase `currencies` table:
+- **TON** (Toncoin) and **USDT** (Tether) are the primary currencies
+- Currencies can be added from the Admin Panel → Currencies → Quick Add
+- XP/points display has been removed from the UI (still stored in DB for leveling logic)
+- Balance protection: amount is deducted before withdrawal record is created
+
+## TON Wallet Integration
+Users can connect their TON wallet address in the Profile page:
+- Address is stored in `localStorage` under key `ton_connected_wallet`
+- On-chain balances (TON + USDT) are fetched from TonCenter public API
+- USDT is fetched as a Jetton from master: `EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs`
+
 ## Admin Panel
 Access via `/admin` route. Tabs include:
 - Dashboard - Platform stats
 - Users - User management (ban/unban)
 - Tasks - Task management
-- Currencies - Currency management
+- Currencies - Currency management (quick-add TON/USDT, custom currency form)
 - Ads Config - Ad network settings (SDK injection, daily ads config, zone IDs)
 - Spin Wheel - Spin prize management
 - Wallet - Wallet token management

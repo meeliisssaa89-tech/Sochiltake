@@ -10,9 +10,44 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Languages, ArrowUpRight, Loader2, X, ChevronDown } from "lucide-react";
+import { Languages, ArrowUpRight, Loader2, X, ChevronDown, Wallet, RefreshCw, Link2, Link2Off } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLivePrices, getLiveRate } from "@/hooks/useLivePrices";
+
+const TON_ICON = "https://ton.org/icons/ton_symbol.svg";
+const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
+const USDT_JETTON_MASTER = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs";
+
+async function fetchTonWalletData(address: string) {
+  const [tonRes, jettonRes] = await Promise.allSettled([
+    fetch(`https://toncenter.com/api/v2/getAddressBalance?address=${address}`),
+    fetch(`https://toncenter.com/api/v2/getTokenData?address=${USDT_JETTON_MASTER}`),
+  ]);
+
+  let tonBalance = 0;
+  let usdtBalance = 0;
+
+  if (tonRes.status === "fulfilled" && tonRes.value.ok) {
+    const data = await tonRes.value.json();
+    if (data.ok) {
+      tonBalance = Number(data.result) / 1e9;
+    }
+  }
+
+  try {
+    const jettonBalRes = await fetch(
+      `https://toncenter.com/api/v2/getTokenData?address=${address}&jetton_master=${USDT_JETTON_MASTER}`
+    );
+    if (jettonBalRes.ok) {
+      const d = await jettonBalRes.json();
+      if (d.ok && d.result) {
+        usdtBalance = Number(d.result.balance ?? 0) / 1e6;
+      }
+    }
+  } catch { /* noop */ }
+
+  return { tonBalance, usdtBalance };
+}
 
 interface Token {
   id: string;
@@ -21,6 +56,8 @@ interface Token {
   icon_url: string | null;
   price_usd: number;
 }
+
+const WALLET_KEY = "ton_connected_wallet";
 
 export function ProfilePage() {
   const { t, language, setLanguage } = useLanguage();
@@ -34,6 +71,38 @@ export function ProfilePage() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+
+  const [walletInput, setWalletInput] = useState("");
+  const [connectedWallet, setConnectedWallet] = useState<string | null>(() => localStorage.getItem(WALLET_KEY));
+  const [showWalletInput, setShowWalletInput] = useState(false);
+
+  const { data: onChainData, isLoading: onChainLoading, refetch: refetchOnChain } = useQuery({
+    queryKey: ["ton-onchain", connectedWallet],
+    queryFn: () => fetchTonWalletData(connectedWallet!),
+    enabled: !!connectedWallet,
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const handleConnectWallet = () => {
+    const addr = walletInput.trim();
+    if (!addr) return;
+    if (addr.length < 20) {
+      toast({ title: t("error"), description: "Invalid TON wallet address", variant: "destructive" });
+      return;
+    }
+    localStorage.setItem(WALLET_KEY, addr);
+    setConnectedWallet(addr);
+    setWalletInput("");
+    setShowWalletInput(false);
+    toast({ title: "Wallet connected", description: addr.slice(0, 8) + "..." + addr.slice(-6) });
+  };
+
+  const handleDisconnectWallet = () => {
+    localStorage.removeItem(WALLET_KEY);
+    setConnectedWallet(null);
+    toast({ title: "Wallet disconnected" });
+  };
 
   const { data: tokens = [] } = useQuery<Token[]>({
     queryKey: ["wallet-tokens"],
@@ -50,9 +119,6 @@ export function ProfilePage() {
     const rate = getLiveRate(b.currencies.symbol, livePrices, Number(b.currencies.exchange_rate || 0));
     return sum + Number(b.amount) * rate;
   }, 0);
-
-  const TON_ICON = "https://ton.org/icons/ton_symbol.svg";
-  const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
 
   const selectedBalance = balances.find((b) => b.id === selectedBalanceId) || balances[0];
 
@@ -272,6 +338,129 @@ export function ProfilePage() {
             );
           })}
         </div>
+      </motion.div>
+
+      {/* TON Wallet Connection */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+        <div className="flex items-center justify-between mb-2 px-1">
+          <h3 className="font-semibold text-sm flex items-center gap-1.5">
+            <img src={TON_ICON} alt="TON" className="w-4 h-4 rounded-full" />
+            TON Wallet
+          </h3>
+          <div className="flex items-center gap-1.5">
+            {connectedWallet && (
+              <button
+                onClick={() => refetchOnChain()}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${onChainLoading ? "animate-spin" : ""}`} />
+              </button>
+            )}
+            {connectedWallet ? (
+              <button
+                onClick={handleDisconnectWallet}
+                className="flex items-center gap-1 text-[10px] text-destructive hover:opacity-80 transition-opacity"
+              >
+                <Link2Off className="w-3 h-3" /> Disconnect
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowWalletInput((p) => !p)}
+                className="flex items-center gap-1 text-[10px] text-primary hover:opacity-80 transition-opacity"
+              >
+                <Link2 className="w-3 h-3" /> Connect
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Input for connecting */}
+        {!connectedWallet && showWalletInput && (
+          <div className="glass-card rounded-xl p-3 space-y-2 border border-primary/20 mb-2">
+            <p className="text-[11px] text-muted-foreground">Paste your TON wallet address</p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="EQ... or UQ..."
+                value={walletInput}
+                onChange={(e) => setWalletInput(e.target.value)}
+                className="flex-1 h-8 text-xs font-mono bg-secondary border-border rounded-xl"
+                data-testid="input-ton-wallet"
+              />
+              <Button
+                size="sm"
+                onClick={handleConnectWallet}
+                className="h-8 px-3 text-xs rounded-xl"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Connected wallet card */}
+        {connectedWallet && (
+          <div className="glass-card rounded-xl p-3 space-y-2 border border-primary/10">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              <p className="text-[10px] text-muted-foreground font-mono truncate">
+                {connectedWallet.slice(0, 10)}...{connectedWallet.slice(-8)}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-3">
+                <img src={TON_ICON} alt="TON" className="w-8 h-8 rounded-full bg-secondary p-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Toncoin</p>
+                  <p className="text-[10px] text-muted-foreground">TON</p>
+                </div>
+                <div className="text-right">
+                  {onChainLoading ? (
+                    <div className="w-12 h-4 bg-secondary animate-pulse rounded" />
+                  ) : (
+                    <p className="text-sm font-semibold tabular-nums">
+                      {(onChainData?.tonBalance ?? 0).toFixed(4)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <img src={USDT_ICON} alt="USDT" className="w-8 h-8 rounded-full bg-secondary p-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Tether USD</p>
+                  <p className="text-[10px] text-muted-foreground">USDT</p>
+                </div>
+                <div className="text-right">
+                  {onChainLoading ? (
+                    <div className="w-12 h-4 bg-secondary animate-pulse rounded" />
+                  ) : (
+                    <p className="text-sm font-semibold tabular-nums">
+                      {(onChainData?.usdtBalance ?? 0).toFixed(2)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Empty prompt */}
+        {!connectedWallet && !showWalletInput && (
+          <button
+            onClick={() => setShowWalletInput(true)}
+            className="glass-card rounded-xl p-3 w-full flex items-center gap-3 border border-dashed border-primary/20 hover:border-primary/40 transition-colors"
+            data-testid="btn-connect-ton-wallet"
+          >
+            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <Wallet className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium">Connect TON Wallet</p>
+              <p className="text-[10px] text-muted-foreground">View your on-chain TON & USDT balance</p>
+            </div>
+            <Link2 className="w-4 h-4 text-muted-foreground shrink-0" />
+          </button>
+        )}
       </motion.div>
 
       {/* On-chain tokens */}

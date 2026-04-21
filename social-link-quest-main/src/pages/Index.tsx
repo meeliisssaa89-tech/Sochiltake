@@ -64,8 +64,8 @@ export default function Index() {
       <AdsSdkInjector />
       <div className="max-w-lg mx-auto">
         {hasLogo && (
-          <div className="flex items-center justify-center pt-4 pb-2">
-            <div className="relative w-20 h-20" data-testid="logo-frame">
+          <div className="flex items-center justify-center pt-3 pb-1">
+            <div className="relative w-14 h-14" data-testid="logo-frame">
               {/* Color-reflective glow behind the frame (uses the logo itself, blurred) */}
               <img
                 src={logoUrl as string}
@@ -79,17 +79,17 @@ export default function Index() {
                 aria-hidden="true"
                 className="absolute inset-0 w-full h-full object-contain rounded-full scale-110 blur-md opacity-60 pointer-events-none select-none"
               />
-              {/* Glassy circular ring */}
+              {/* Glassy circular ring — thicker border */}
               <div
-                className="absolute inset-0 rounded-full border border-white/25 bg-white/5 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_4px_24px_rgba(255,255,255,0.08)] overflow-hidden"
+                className="absolute inset-0 rounded-full border-[3px] border-white/40 bg-white/8 backdrop-blur-md shadow-[inset_0_2px_0_rgba(255,255,255,0.45),0_6px_28px_rgba(255,255,255,0.12),inset_0_0_0_1px_rgba(255,255,255,0.15)] overflow-hidden"
               >
                 {/* Subtle highlight sweep to make it look like glass */}
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/20 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/25 via-transparent to-transparent pointer-events-none" />
                 {/* The actual crisp logo */}
                 <img
                   src={logoUrl as string}
                   alt="App Logo"
-                  className="absolute inset-0 m-auto w-[78%] h-[78%] object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.25)]"
+                  className="absolute inset-0 m-auto w-[76%] h-[76%] object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.25)]"
                   data-testid="img-app-logo"
                 />
               </div>

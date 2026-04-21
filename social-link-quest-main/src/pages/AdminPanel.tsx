@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useAllUsers, useAllTasks, useCurrencies, usePlatformStats, useUploadImage, useUpdateCurrency } from "@/hooks/useSupabaseData";
+import { useAllUsers, useAllTasks, useCurrencies, usePlatformStats, useUploadImage, useUpdateCurrency, useCreateCurrency } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -208,6 +208,23 @@ function UsersView({ search, setSearch }: { search: string; setSearch: (s: strin
 
 // TasksView removed — replaced by AdminTasksView component
 
+const DEFAULT_CURRENCIES = [
+  {
+    name: "Toncoin",
+    symbol: "TON",
+    exchange_rate: 3.2,
+    decimals: 9,
+    icon_url: "https://ton.org/icons/ton_symbol.svg",
+  },
+  {
+    name: "Tether USD",
+    symbol: "USDT",
+    exchange_rate: 1.0,
+    decimals: 6,
+    icon_url: "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040",
+  },
+];
+
 function CurrenciesView() {
   const { t } = useLanguage();
   const { toast } = useToast();
@@ -215,8 +232,11 @@ function CurrenciesView() {
   const { data: currencies, isLoading } = useCurrencies();
   const uploadImage = useUploadImage();
   const updateCurrency = useUpdateCurrency();
+  const createCurrency = useCreateCurrency();
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCurrency, setNewCurrency] = useState({ name: "", symbol: "", exchange_rate: 1.0 });
 
   const toggleActive = async (id: string, isActive: boolean) => {
     await supabase.from("currencies").update({ is_active: !isActive }).eq("id", id);
@@ -237,8 +257,117 @@ function CurrenciesView() {
     }
   };
 
+  const handleAddCurrency = async () => {
+    if (!newCurrency.name.trim() || !newCurrency.symbol.trim()) {
+      toast({ title: t("error"), description: "Name and symbol are required", variant: "destructive" });
+      return;
+    }
+    try {
+      await createCurrency.mutateAsync({
+        name: newCurrency.name.trim(),
+        symbol: newCurrency.symbol.trim().toUpperCase(),
+        exchange_rate: newCurrency.exchange_rate,
+      });
+      toast({ title: t("success"), description: `${newCurrency.symbol.toUpperCase()} added` });
+      setNewCurrency({ name: "", symbol: "", exchange_rate: 1.0 });
+      setShowAddForm(false);
+    } catch (err: any) {
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleQuickAdd = async (preset: typeof DEFAULT_CURRENCIES[0]) => {
+    const exists = (currencies || []).some((c) => c.symbol === preset.symbol);
+    if (exists) {
+      toast({ title: "Already exists", description: `${preset.symbol} is already in the list` });
+      return;
+    }
+    try {
+      await createCurrency.mutateAsync(preset);
+      toast({ title: t("success"), description: `${preset.symbol} added` });
+    } catch (err: any) {
+      toast({ title: t("error"), description: err.message, variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-3">
+      {/* Quick Add: TON & USDT */}
+      <div className="glass-card rounded-xl p-3 space-y-2">
+        <p className="text-xs font-semibold text-muted-foreground">Quick Add</p>
+        <div className="flex gap-2 flex-wrap">
+          {DEFAULT_CURRENCIES.map((preset) => {
+            const exists = (currencies || []).some((c) => c.symbol === preset.symbol);
+            return (
+              <button
+                key={preset.symbol}
+                onClick={() => handleQuickAdd(preset)}
+                disabled={exists || createCurrency.isPending}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                  exists
+                    ? "border-success/30 text-success bg-success/5 cursor-default"
+                    : "border-primary/40 text-primary hover:bg-primary/10"
+                }`}
+              >
+                <img src={preset.icon_url} alt={preset.symbol} className="w-4 h-4 rounded-full" />
+                {preset.symbol}
+                {exists && " ✓"}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setShowAddForm((p) => !p)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:bg-secondary transition-all"
+          >
+            + Custom
+          </button>
+        </div>
+
+        {/* Custom add form */}
+        {showAddForm && (
+          <div className="space-y-2 pt-1 border-t border-border">
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground">Name</label>
+                <Input
+                  value={newCurrency.name}
+                  onChange={(e) => setNewCurrency({ ...newCurrency, name: e.target.value })}
+                  placeholder="Toncoin"
+                  className="h-8 text-xs mt-0.5"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Symbol</label>
+                <Input
+                  value={newCurrency.symbol}
+                  onChange={(e) => setNewCurrency({ ...newCurrency, symbol: e.target.value })}
+                  placeholder="TON"
+                  className="h-8 text-xs mt-0.5"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Rate (USD)</label>
+                <Input
+                  type="number"
+                  value={newCurrency.exchange_rate}
+                  onChange={(e) => setNewCurrency({ ...newCurrency, exchange_rate: +e.target.value })}
+                  className="h-8 text-xs mt-0.5"
+                />
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={handleAddCurrency}
+              disabled={createCurrency.isPending}
+              className="w-full h-8 text-xs"
+            >
+              {createCurrency.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Add Currency"}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Existing currencies */}
       {isLoading ? (
         <div className="space-y-2">
           {[1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}

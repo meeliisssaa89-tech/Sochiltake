@@ -6,7 +6,7 @@ import { AppIcon } from "@/components/AppIcon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { DailyAdsCard } from "@/components/DailyAdsCard";
@@ -28,9 +28,6 @@ export function HomePage() {
   const { data: settings } = useAppSettings();
   const sectionIcons = (settings?.app_icons || {}) as Record<string, string>;
   const checkinMutation = useDailyCheckin();
-
-  const expToNext = 5000;
-  const expProgress = user ? ((user.exp % expToNext) / expToNext) * 100 : 0;
 
   const completedCount = userTasks?.filter((ut) => ut.status === "completed").length || 0;
   const usdtBalance = balances.find((b) => b.currencies?.symbol === "USDT")?.amount || 0;
@@ -62,7 +59,7 @@ export function HomePage() {
     try {
       const result = await checkinMutation.mutateAsync(userId);
       hapticNotification("success");
-      toast({ title: t("success"), description: `+${result.reward} TON, +${result.xpReward} XP (${result.streak} ${t("streak")})` });
+      toast({ title: t("success"), description: `+${result.reward} TON (${result.streak} ${t("streak")})` });
     } catch (err: any) {
       hapticNotification("error");
       toast({ title: t("error"), description: err.message, variant: "destructive" });
@@ -89,8 +86,8 @@ export function HomePage() {
             </div>
             {user?.username && <p className="text-xs text-muted-foreground">@{user.username}</p>}
             <div className="mt-2 flex items-center gap-2">
-              <Progress value={expProgress} className="h-1.5 flex-1" />
-              <span className="text-[10px] text-muted-foreground whitespace-nowrap">{user?.exp || 0}/{expToNext} {t("exp")}</span>
+              <img src="https://ton.org/icons/ton_symbol.svg" alt="TON" className="w-3.5 h-3.5 rounded-full" />
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap tabular-nums">{Number(tonBalance).toLocaleString()} TON</span>
             </div>
           </div>
         </div>
@@ -188,7 +185,7 @@ export function HomePage() {
                       {taskIcon ? (
                         <img src={taskIcon} alt={taskSym} className="w-3 h-3 rounded-full inline" />
                       ) : null}
-                      +{task.reward_amount} {taskSym} {task.xp_reward > 0 && `• +${task.xp_reward} XP`}
+                      +{task.reward_amount} {taskSym}
                     </p>
                   </div>
                 </div>

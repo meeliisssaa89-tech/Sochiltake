@@ -98,7 +98,7 @@ export function DailyAdsCard() {
       hapticNotification("success");
       toast({
         title: t("success"),
-        description: `+${result.reward} ${currencySymbol}, +${result.xp} XP`,
+        description: `+${result.reward} ${currencySymbol}`,
       });
       await creditBalanceDirectly(result.reward);
       await refreshUser();
@@ -127,7 +127,7 @@ export function DailyAdsCard() {
             <h3 className="font-semibold text-sm">{t("dailyAds")}</h3>
             <p className="text-[10px] text-muted-foreground flex items-center gap-1">
               <Coins className="w-3 h-3 text-accent" />
-              +{adsConfig.reward_per_ad} {currencySymbol} · +{adsConfig.xp_per_ad} XP
+              +{adsConfig.reward_per_ad} {currencySymbol}
             </p>
           </div>
         </div>

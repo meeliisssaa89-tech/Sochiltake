@@ -439,6 +439,24 @@ export function useUpdateCurrency() {
   });
 }
 
+export function useCreateCurrency() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { name: string; symbol: string; exchange_rate: number; decimals?: number; icon_url?: string }) => {
+      const { error } = await supabase.from("currencies").insert({
+        name: data.name,
+        symbol: data.symbol,
+        exchange_rate: data.exchange_rate,
+        decimals: data.decimals ?? 6,
+        icon_url: data.icon_url ?? null,
+        is_active: true,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["currencies"] }),
+  });
+}
+
 export function useUploadImage() {
   return useMutation({
     mutationFn: async ({ file }: { file: File; path: string }) => {
