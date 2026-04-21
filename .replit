@@ -45,3 +45,9 @@ waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[userenv]
+
+[userenv.shared]
+SUPABASE_ACCESS_TOKEN = "sbp_68b1ffc7c94a6e85ab1a588bca9b6e1486b7e1ef"
+SUPABASE_PROJECT_REF = "abmwmsvbwaqjxugleegn"
