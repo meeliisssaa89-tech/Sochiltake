@@ -62,7 +62,7 @@ export function HomePage() {
     try {
       const result = await checkinMutation.mutateAsync(userId);
       hapticNotification("success");
-      toast({ title: t("success"), description: `+${result.reward} TON  •  +${result.xpReward} ${t("exp")} (${result.streak} ${t("streak")})` });
+      toast({ title: t("success"), description: `+${result.reward} ${result.currencySymbol || "TON"}  •  +${result.xpReward} ${t("exp")} (${result.streak} ${t("streak")})` });
     } catch (err: any) {
       hapticNotification("error");
       toast({ title: t("error"), description: err.message, variant: "destructive" });

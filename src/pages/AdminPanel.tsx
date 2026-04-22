@@ -1041,7 +1041,21 @@ function CurrenciesView() {
             </div>
 
             {/* Withdrawal rules */}
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/40">
+            <div className="grid grid-cols-4 gap-2 pt-2 border-t border-border/40">
+              <div>
+                <label className="text-[9px] text-muted-foreground">Rate (USD)</label>
+                <Input
+                  type="number"
+                  step="any"
+                  defaultValue={c.exchange_rate ?? 1}
+                  onBlur={async (e) => {
+                    await updateCurrency.mutateAsync({ id: c.id, data: { exchange_rate: +e.target.value } as any });
+                    toast({ title: t("success") });
+                  }}
+                  className="h-7 text-xs mt-0.5"
+                  data-testid={`input-rate-${c.id}`}
+                />
+              </div>
               <div>
                 <label className="text-[9px] text-muted-foreground">Min withdraw</label>
                 <Input
