@@ -19,7 +19,7 @@ interface TaskForm {
   title_ar: string;
   description_en: string;
   description_ar: string;
-  type: "telegram_join" | "watch_ad" | "social_link";
+  type: "telegram_join" | "watch_ad" | "social_link" | "code_api";
   reward_amount: number;
   reward_currency_id: string | null;
   xp_reward: number;
@@ -28,6 +28,15 @@ interface TaskForm {
   sort_order: number;
   icon_url: string;
   metadata: Record<string, any>;
+  // code_api fields
+  verify_url: string;
+  verify_method: "POST" | "GET";
+  verify_headers: string; // JSON text
+  body_template: string;  // JSON text
+  success_key: string;
+  success_value: string;
+  max_completions: number | null;
+  user_limit: number;
 }
 
 const empty: TaskForm = {
@@ -35,6 +44,11 @@ const empty: TaskForm = {
   type: "telegram_join", reward_amount: 100, reward_currency_id: null,
   xp_reward: 10, is_active: true, is_required: false, sort_order: 0,
   icon_url: "", metadata: {},
+  verify_url: "", verify_method: "POST",
+  verify_headers: "{}",
+  body_template: '{\n  "user_id": "{{user_id}}",\n  "code": "{{code}}"\n}',
+  success_key: "success", success_value: "true",
+  max_completions: null, user_limit: 1,
 };
 
 export function AdminTasksView() {
@@ -73,6 +87,31 @@ export function AdminTasksView() {
       icon_url: editing.icon_url || null,
       metadata: editing.metadata,
     };
+
+    if (editing.type === "code_api") {
+      let parsedHeaders: any = {};
+      let parsedBody: any = {};
+      try { parsedHeaders = editing.verify_headers.trim() ? JSON.parse(editing.verify_headers) : {}; }
+      catch { toast({ title: "Invalid JSON in headers", variant: "destructive" }); return; }
+      try { parsedBody = editing.body_template.trim() ? JSON.parse(editing.body_template) : {}; }
+      catch { toast({ title: "Invalid JSON in body template", variant: "destructive" }); return; }
+      if (!editing.verify_url.trim()) {
+        toast({ title: "Verify URL is required", variant: "destructive" }); return;
+      }
+      payload.verify_url = editing.verify_url.trim();
+      payload.verify_method = editing.verify_method;
+      payload.verify_headers = parsedHeaders;
+      payload.body_template = parsedBody;
+      payload.success_key = editing.success_key.trim() || "success";
+      payload.success_value = editing.success_value.trim() || "true";
+      payload.max_completions = editing.max_completions || null;
+      payload.user_limit = editing.user_limit ?? 1;
+    } else {
+      payload.verify_url = null;
+      payload.verify_method = null;
+      payload.verify_headers = {};
+      payload.body_template = {};
+    }
     let err;
     if (editing.id) {
       ({ error: err } = await supabase.from("tasks").update(payload).eq("id", editing.id));
@@ -109,6 +148,14 @@ export function AdminTasksView() {
       sort_order: t.sort_order,
       icon_url: t.icon_url || "",
       metadata: t.metadata || {},
+      verify_url: t.verify_url || "",
+      verify_method: (t.verify_method || "POST") as "POST" | "GET",
+      verify_headers: JSON.stringify(t.verify_headers || {}, null, 2),
+      body_template: JSON.stringify(t.body_template || { user_id: "{{user_id}}", code: "{{code}}" }, null, 2),
+      success_key: t.success_key || "success",
+      success_value: t.success_value ?? "true",
+      max_completions: t.max_completions ?? null,
+      user_limit: t.user_limit ?? 1,
     });
     setShowForm(true);
   };
@@ -193,6 +240,7 @@ export function AdminTasksView() {
                   <SelectItem value="telegram_join">Telegram Join</SelectItem>
                   <SelectItem value="social_link">Social Link / Visit</SelectItem>
                   <SelectItem value="watch_ad">Watch Ad</SelectItem>
+                  <SelectItem value="code_api">Code Verification (External API)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -246,6 +294,102 @@ export function AdminTasksView() {
                   className="h-8 text-xs"
                   placeholder="https://t.me/MyChannel"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Code API metadata */}
+          {editing.type === "code_api" && (
+            <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
+              <p className="text-[10px] font-medium text-primary">External Code Verification</p>
+              <p className="text-[10px] text-muted-foreground">
+                User visits the redirect URL, gets a one-time code, then submits it.
+                We POST it to your verify URL — placeholders <code>{`{{user_id}}`}</code> and <code>{`{{code}}`}</code> are replaced.
+              </p>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Redirect URL (where user goes to get the code)</label>
+                <Input
+                  value={editing.metadata?.redirect_url || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, redirect_url: e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="https://partner.example.com/start?u={{user_id}}"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <label className="text-[10px] text-muted-foreground">Verify URL (your API)</label>
+                  <Input
+                    value={editing.verify_url}
+                    onChange={(e) => setEditing({ ...editing, verify_url: e.target.value })}
+                    className="h-8 text-xs"
+                    placeholder="https://partner.example.com/api/verify"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Method</label>
+                  <Select value={editing.verify_method} onValueChange={(v: any) => setEditing({ ...editing, verify_method: v })}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="GET">GET</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Headers (JSON)</label>
+                <Textarea
+                  value={editing.verify_headers}
+                  onChange={(e) => setEditing({ ...editing, verify_headers: e.target.value })}
+                  rows={2}
+                  className="text-xs font-mono"
+                  placeholder='{"Authorization":"Bearer XYZ"}'
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Body template (JSON)</label>
+                <Textarea
+                  value={editing.body_template}
+                  onChange={(e) => setEditing({ ...editing, body_template: e.target.value })}
+                  rows={4}
+                  className="text-xs font-mono"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Success key (e.g. "success" or "data.ok")</label>
+                  <Input
+                    value={editing.success_key}
+                    onChange={(e) => setEditing({ ...editing, success_key: e.target.value })}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Success value (string match)</label>
+                  <Input
+                    value={editing.success_value}
+                    onChange={(e) => setEditing({ ...editing, success_value: e.target.value })}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Max total completions (blank = ∞)</label>
+                  <Input
+                    type="number"
+                    value={editing.max_completions ?? ""}
+                    onChange={(e) => setEditing({ ...editing, max_completions: e.target.value === "" ? null : +e.target.value })}
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Per-user limit</label>
+                  <Input
+                    type="number"
+                    value={editing.user_limit}
+                    onChange={(e) => setEditing({ ...editing, user_limit: +e.target.value })}
+                    className="h-8 text-xs"
+                  />
+                </div>
               </div>
             </div>
           )}

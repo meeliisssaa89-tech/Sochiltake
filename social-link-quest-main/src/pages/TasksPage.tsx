@@ -22,7 +22,7 @@ import {
   Globe,
 } from "lucide-react";
 
-type FilterType = "all" | "telegram_join" | "social_link" | "watch_ad";
+type FilterType = "all" | "telegram_join" | "social_link" | "watch_ad" | "code_api";
 
 export function TasksPage() {
   const { t, language } = useLanguage();
@@ -31,6 +31,7 @@ export function TasksPage() {
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  const [codeInputs, setCodeInputs] = useState<Record<string, string>>({});
 
   const { data: tasks, isLoading: tasksLoading } = useTasks();
   const { data: userTasks } = useUserTasks(user?.telegram_id);
@@ -41,6 +42,7 @@ export function TasksPage() {
     { id: "telegram_join", label: t("telegramTasks") },
     { id: "social_link", label: t("twitterTasks") },
     { id: "watch_ad", label: t("watchAd") },
+    { id: "code_api", label: "Code" },
   ];
 
   const completedTaskIds = new Set(userTasks?.filter((ut) => ut.status === "completed").map((ut) => ut.task_id));
@@ -60,11 +62,12 @@ export function TasksPage() {
       case "telegram_join": return Send;
       case "social_link": return Globe;
       case "watch_ad": return Eye;
+      case "code_api": return Globe;
       default: return Star;
     }
   };
 
-  const handleTaskAction = async (taskId: string, action: string) => {
+  const handleTaskAction = async (taskId: string, action: string, code?: string) => {
     if (!user?.telegram_id) return;
     setPendingTaskId(taskId);
     try {
@@ -72,6 +75,7 @@ export function TasksPage() {
         userId: user.telegram_id,
         taskId,
         action,
+        code,
       });
 
       if (result.status === "started") {
@@ -87,6 +91,7 @@ export function TasksPage() {
           title: t("success"),
           description: result.xp > 0 ? `+${result.reward}  •  +${result.xp} EXP` : `+${result.reward}`,
         });
+        setCodeInputs((p) => { const n = { ...p }; delete n[taskId]; return n; });
       }
     } catch (err: any) {
       toast({ title: t("error"), description: err.message, variant: "destructive" });
@@ -187,12 +192,32 @@ export function TasksPage() {
                   <Badge variant="outline" className="border-success/30 text-success text-[10px]">
                     {t("completed")}
                   </Badge>
+                ) : task.type === "code_api" && isPending ? (
+                  <div className="flex items-center gap-1.5 max-w-[55%]">
+                    <Input
+                      value={codeInputs[task.id] || ""}
+                      onChange={(e) => setCodeInputs((p) => ({ ...p, [task.id]: e.target.value }))}
+                      placeholder="Code"
+                      className="h-8 text-xs w-24"
+                      data-testid={`input-code-${task.id}`}
+                    />
+                    <Button
+                      size="sm"
+                      disabled={isThisLoading || !(codeInputs[task.id] || "").trim()}
+                      onClick={() => handleTaskAction(task.id, "verify", codeInputs[task.id])}
+                      className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-xl h-8 text-xs font-semibold px-3"
+                      data-testid={`button-verify-${task.id}`}
+                    >
+                      {isThisLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : t("verifyTask")}
+                    </Button>
+                  </div>
                 ) : (
                   <Button
                     size="sm"
                     disabled={isThisLoading}
                     onClick={() => handleTaskAction(task.id, isPending ? "verify" : "start")}
                     className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-xl h-8 text-xs font-semibold px-3"
+                    data-testid={`button-task-${task.id}`}
                   >
                     {isThisLoading ? (
                       <Loader2 className="w-3 h-3 animate-spin" />

@@ -133,8 +133,8 @@ export function useDailyCheckin() {
 export function useVerifyTask() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ userId, taskId, action }: { userId: string; taskId: string; action: string }) =>
-      invokeFunction("verify-task", { userId, taskId, action }),
+    mutationFn: async ({ userId, taskId, action, code }: { userId: string; taskId: string; action: string; code?: string }) =>
+      invokeFunction("verify-task", { userId, taskId, action, code }),
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ["user-tasks", v.userId] });
       qc.invalidateQueries({ queryKey: ["balances", v.userId] });

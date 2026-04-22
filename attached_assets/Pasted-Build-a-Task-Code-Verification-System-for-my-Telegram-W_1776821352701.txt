@@ -1,0 +1,112 @@
+Build a “Task Code Verification System” for my Telegram Web App that supports external website integration in the future without code changes.
+
+Task Flow:
+
+1. User clicks "Start Task" → gets redirected to an external link.
+2. User visits the website, completes actions, and receives a “task code”.
+3. User returns to the app and submits the code.
+4. The system verifies the code and rewards the user.
+
+---
+
+Requirements:
+
+1. Task Model Enhancements:
+
+Each task should include:
+
+- title
+- redirect_url (the website link)
+- reward
+- verification_type = "code_api"
+- verify_url (external API endpoint)
+- method (POST/GET)
+- headers (JSON)
+- body_template (JSON with placeholders like {{user_id}}, {{code}})
+- success_key (e.g. "success")
+- success_value (true)
+- max_completions
+- user_limit
+- is_active
+
+---
+
+2. User Flow:
+
+- When user clicks task → open redirect_url
+- After returning → user sees:
+  - input field (enter code)
+  - button (Verify)
+
+---
+
+3. Code Verification Logic:
+
+When user submits code:
+
+- Replace placeholders in body_template
+
+- Send request to verify_url
+
+- Example body:
+  {
+  "user_id": "{{user_id}}",
+  "code": "{{code}}"
+  }
+
+- Receive response:
+  {
+  "success": true
+  }
+
+- If success → reward user
+
+- If not → show error
+
+---
+
+4. Security:
+
+- Prevent same code reuse
+- Prevent user submitting multiple times beyond limit
+- Rate limit verification attempts
+
+---
+
+5. Admin Dashboard:
+
+- Create/edit task
+- Add external API config بسهولة
+- Enable/disable task
+- Delete task
+- Set limits (max_completions, user_limit)
+
+---
+
+6. Logging:
+
+- Store each verification attempt:
+  user_id, task_id, code, status, timestamp
+
+---
+
+Goal:
+
+I want to be able later to connect ANY website that generates a code, by فقط إدخال API settings من لوحة التحكم without modifying the app code.
+7. Unique Code Handling:
+
+The system must assume that each verification code is:
+
+- dynamically generated per user visit (not static)
+- single-use only
+
+When verifying:
+
+- always send both user_id and code to external API
+- do NOT accept reused codes
+- rely on external API to validate:
+  - code ownership (belongs to user)
+  - expiration
+  - usage status
+
+The app should not generate or guess codes, only validate via API.
