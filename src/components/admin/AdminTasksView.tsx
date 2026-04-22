@@ -142,7 +142,7 @@ export function AdminTasksView() {
           description: editing.description_ar || editing.description_en || undefined,
           rewardAmount: editing.reward_amount,
           rewardSymbol: cur?.symbol,
-          rewardIconUrl: editing.icon_url || cur?.icon_url || null,
+          rewardIconUrl: cur?.icon_url || editing.icon_url || null,
           xpReward: editing.xp_reward,
           featuredUser: featured
             ? {
