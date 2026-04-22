@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
-import { useAllTasks, useCurrencies, useUploadImage } from "@/hooks/useSupabaseData";
+import { useAllTasks, useCurrencies, useUploadImage, useAllUsers, useAppSettings } from "@/hooks/useSupabaseData";
+import { notifyNewContent } from "@/lib/notifyContent";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,8 @@ interface TaskForm {
   sort_order: number;
   icon_url: string;
   metadata: Record<string, any>;
+  notify_telegram: boolean;
+  featured_user_id: string | null;
   // code_api fields
   verify_url: string;
   verify_method: "POST" | "GET";
@@ -44,6 +47,7 @@ const empty: TaskForm = {
   type: "telegram_join", reward_amount: 100, reward_currency_id: null,
   xp_reward: 10, is_active: true, is_required: false, sort_order: 0,
   icon_url: "", metadata: {},
+  notify_telegram: true, featured_user_id: null,
   verify_url: "", verify_method: "POST",
   verify_headers: "{}",
   body_template: '{\n  "token": "{{token}}",\n  "code": "{{code}}"\n}',
@@ -54,6 +58,8 @@ const empty: TaskForm = {
 export function AdminTasksView() {
   const { data: tasks, isLoading } = useAllTasks();
   const { data: currencies } = useCurrencies();
+  const { data: allUsers } = useAllUsers();
+  const { data: settings } = useAppSettings();
   const qc = useQueryClient();
   const { toast } = useToast();
   const uploadImage = useUploadImage();
@@ -113,6 +119,7 @@ export function AdminTasksView() {
       payload.body_template = {};
     }
     let err;
+    const isNew = !editing.id;
     if (editing.id) {
       ({ error: err } = await supabase.from("tasks").update(payload).eq("id", editing.id));
     } else {
@@ -122,6 +129,35 @@ export function AdminTasksView() {
     qc.invalidateQueries({ queryKey: ["all-tasks"] });
     qc.invalidateQueries({ queryKey: ["tasks"] });
     toast({ title: "Task saved" });
+
+    if (isNew && editing.notify_telegram && editing.is_active) {
+      try {
+        const cur = (currencies || []).find((c: any) => c.id === editing.reward_currency_id);
+        const featured = editing.featured_user_id
+          ? (allUsers || []).find((u: any) => u.telegram_id === editing.featured_user_id)
+          : null;
+        const webAppUrl = (settings as any)?.bot_webapp_url || window.location.origin;
+        const r = await notifyNewContent("task", {
+          title: editing.title_ar || editing.title_en,
+          description: editing.description_ar || editing.description_en || undefined,
+          rewardAmount: editing.reward_amount,
+          rewardSymbol: cur?.symbol,
+          rewardIconUrl: editing.icon_url || cur?.icon_url || null,
+          xpReward: editing.xp_reward,
+          featuredUser: featured
+            ? {
+                name: featured.first_name || featured.username || "User",
+                photoUrl: featured.photo_url,
+              }
+            : null,
+          webAppUrl,
+        });
+        toast({ title: `📣 Sent to ${r.sent} users` });
+      } catch (e: any) {
+        toast({ title: "Notification failed", description: e.message, variant: "destructive" });
+      }
+    }
+
     reset();
   };
 
@@ -435,6 +471,41 @@ export function AdminTasksView() {
               <Switch checked={editing.is_required} onCheckedChange={(v) => setEditing({ ...editing, is_required: v })} /> Required (Home)
             </label>
           </div>
+
+          {!editing.id && (
+            <div className="border-t border-border/40 pt-2 mt-1 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium flex-1">📣 Notify Telegram users</span>
+                <Switch
+                  checked={editing.notify_telegram}
+                  onCheckedChange={(v) => setEditing({ ...editing, notify_telegram: v })}
+                />
+              </div>
+              {editing.notify_telegram && (
+                <div>
+                  <label className="text-[10px] text-muted-foreground">
+                    Featured user (optional — name + photo in message)
+                  </label>
+                  <Select
+                    value={editing.featured_user_id || "none"}
+                    onValueChange={(v) =>
+                      setEditing({ ...editing, featured_user_id: v === "none" ? null : v })
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— None —</SelectItem>
+                      {(allUsers || []).slice(0, 100).map((u: any) => (
+                        <SelectItem key={u.telegram_id} value={u.telegram_id}>
+                          {u.first_name || u.username || u.telegram_id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+          )}
 
           <Button onClick={save} className="w-full h-8 text-xs">
             <Save className="w-3 h-3 me-1" /> Save Task

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { usePromoCodes, useCreatePromoCode, useDeletePromoCode, useTogglePromoCode, useCurrencies } from "@/hooks/useSupabaseData";
+import { usePromoCodes, useCreatePromoCode, useDeletePromoCode, useTogglePromoCode, useCurrencies, useAllUsers, useAppSettings } from "@/hooks/useSupabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, X, Save, Tag, Copy } from "lucide-react";
+import { notifyNewContent } from "@/lib/notifyContent";
+import { Plus, Trash2, X, Save, Tag, Copy, Send } from "lucide-react";
 
 interface PromoForm {
   code: string;
@@ -17,16 +18,21 @@ interface PromoForm {
   max_uses: number;
   is_active: boolean;
   expires_at: string;
+  notify_telegram: boolean;
+  featured_user_id: string | null;
 }
 
 const empty: PromoForm = {
   code: "", reward_amount: 100, reward_currency_id: null,
   xp_reward: 0, max_uses: 0, is_active: true, expires_at: "",
+  notify_telegram: true, featured_user_id: null,
 };
 
 export function AdminPromoCodesView() {
   const { data: codes, isLoading } = usePromoCodes();
   const { data: currencies } = useCurrencies();
+  const { data: allUsers } = useAllUsers();
+  const { data: settings } = useAppSettings();
   const createCode = useCreatePromoCode();
   const deleteCode = useDeletePromoCode();
   const toggleCode = useTogglePromoCode();
@@ -43,8 +49,9 @@ export function AdminPromoCodesView() {
   const save = async () => {
     if (!form.code.trim()) { toast({ title: "Code required", variant: "destructive" }); return; }
     try {
+      const code = form.code.toUpperCase().trim();
       await createCode.mutateAsync({
-        code: form.code.toUpperCase().trim(),
+        code,
         reward_amount: form.reward_amount,
         reward_currency_id: form.reward_currency_id,
         xp_reward: form.xp_reward,
@@ -53,6 +60,35 @@ export function AdminPromoCodesView() {
         expires_at: form.expires_at || null,
       });
       toast({ title: "Promo code created" });
+
+      if (form.notify_telegram) {
+        try {
+          const cur = (currencies || []).find((c: any) => c.id === form.reward_currency_id);
+          const featured = form.featured_user_id
+            ? (allUsers || []).find((u: any) => u.telegram_id === form.featured_user_id)
+            : null;
+          const webAppUrl = (settings as any)?.bot_webapp_url || window.location.origin;
+          const r = await notifyNewContent("promo", {
+            title: `Promo Code: ${code}`,
+            rewardAmount: form.reward_amount,
+            rewardSymbol: cur?.symbol,
+            rewardIconUrl: cur?.icon_url,
+            xpReward: form.xp_reward,
+            promoCode: code,
+            featuredUser: featured
+              ? {
+                  name: featured.first_name || featured.username || "User",
+                  photoUrl: featured.photo_url,
+                }
+              : null,
+            webAppUrl,
+          });
+          toast({ title: `📣 Sent to ${r.sent} users` });
+        } catch (e: any) {
+          toast({ title: "Notification failed", description: e.message, variant: "destructive" });
+        }
+      }
+
       setForm({ ...empty });
       setShowForm(false);
     } catch (err: any) {
@@ -125,6 +161,34 @@ export function AdminPromoCodesView() {
             <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} />
             <span className="text-xs">Active</span>
           </div>
+
+          <div className="border-t border-border/40 pt-2 mt-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <Send className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-medium flex-1">Notify Telegram users</span>
+              <Switch checked={form.notify_telegram} onCheckedChange={(v) => setForm({ ...form, notify_telegram: v })} />
+            </div>
+            {form.notify_telegram && (
+              <div>
+                <label className="text-[10px] text-muted-foreground">Featured user (optional — name + photo in message)</label>
+                <Select
+                  value={form.featured_user_id || "none"}
+                  onValueChange={(v) => setForm({ ...form, featured_user_id: v === "none" ? null : v })}
+                >
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— None —</SelectItem>
+                    {(allUsers || []).slice(0, 100).map((u: any) => (
+                      <SelectItem key={u.telegram_id} value={u.telegram_id}>
+                        {u.first_name || u.username || u.telegram_id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
           <Button onClick={save} disabled={createCode.isPending} className="w-full h-8 text-xs">
             <Save className="w-3 h-3 me-1" /> Create Code
           </Button>
