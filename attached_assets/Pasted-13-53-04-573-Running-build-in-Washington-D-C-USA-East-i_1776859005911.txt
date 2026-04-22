@@ -1,0 +1,55 @@
+13:53:04.573 Running build in Washington, D.C., USA (East) – iad1
+13:53:04.574 Build machine configuration: 2 cores, 8 GB
+13:53:04.806 Cloning github.com/meeliisssaa89-tech/Sochiltake (Branch: main, Commit: 3df4b00)
+13:53:04.808 Previous build caches not available.
+13:53:05.366 Cloning completed: 559.000ms
+13:53:05.875 Running "vercel build"
+13:53:06.859 Vercel CLI 51.6.1
+13:53:07.414 Running "install" command: `npm install`...
+13:53:09.628 npm warn deprecated whatwg-encoding@2.0.0: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+13:53:10.871 npm warn deprecated abab@2.0.6: Use your platform's native atob() and btoa() methods instead
+13:53:10.898 npm warn deprecated domexception@4.0.0: Use your platform's native DOMException instead
+13:53:17.235 
+13:53:17.235 added 490 packages, and audited 491 packages in 10s
+13:53:17.235 
+13:53:17.235 87 packages are looking for funding
+13:53:17.235   run `npm fund` for details
+13:53:17.244 
+13:53:17.245 5 vulnerabilities (3 low, 2 moderate)
+13:53:17.245 
+13:53:17.245 To address all issues (including breaking changes), run:
+13:53:17.245   npm audit fix --force
+13:53:17.245 
+13:53:17.245 Run `npm audit` for details.
+13:53:17.501 
+13:53:17.501 > vite_react_shadcn_ts@0.0.0 build
+13:53:17.501 > vite build
+13:53:17.502 
+13:53:17.732 [36mvite v5.4.21 [32mbuilding for production...[36m[39m
+13:53:17.786 transforming...
+13:53:18.895 [33m[vite:css] @import must precede all other statements (besides @charset or empty @layer)
+13:53:18.895 3  |  @tailwind utilities;
+13:53:18.895 4  |  
+13:53:18.895 5  |  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+13:53:18.896    |  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+13:53:18.896 6  |  
+13:53:18.896 7  |  @layer base {[39m
+13:53:24.996 [32m✓[39m 3827 modules transformed.
+13:53:25.869 rendering chunks...
+13:53:25.891 computing gzip size...
+13:53:25.929 [2mdist/[22m[32mindex.html                 [39m[1m[2m    1.69 kB[22m[1m[22m[2m │ gzip:   0.66 kB[22m
+13:53:25.930 [2mdist/[22m[2massets/[22m[35mindex-6bOniy_K.css  [39m[1m[2m   74.11 kB[22m[1m[22m[2m │ gzip:  12.65 kB[22m
+13:53:25.935 [2mdist/[22m[2massets/[22m[36mindex-w8B3zlh6.js   [39m[1m[33m1,314.48 kB[39m[22m[2m │ gzip: 376.41 kB[22m
+13:53:25.935 [32m✓ built in 8.17s[39m
+13:53:25.936 [33m
+13:53:25.936 (!) Some chunks are larger than 500 kB after minification. Consider:
+13:53:25.937 - Using dynamic import() to code-split the application
+13:53:25.937 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+13:53:25.937 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+13:53:26.073 Build Completed in /vercel/output [19s]
+13:53:26.104 Deploying outputs...
+13:53:27.551 Deployment completed
+13:53:27.658 Creating build cache...
+13:53:41.308 Created build cache: 14s
+13:53:41.309 Uploading build cache [71.41 MB]
+13:53:42.809 Build cache uploaded: 1.500s
