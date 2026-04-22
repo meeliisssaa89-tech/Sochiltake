@@ -262,7 +262,9 @@ export function AdminBotView() {
           <Webhook className="w-4 h-4 text-blue-400" /> Webhook
         </h3>
         <p className="text-[10px] text-muted-foreground">
-          The Telegram Bot API will POST all updates to this URL.
+          Point this at your Supabase <code className="text-primary">telegram-webhook</code> function URL,{" "}
+          <span className="font-medium text-foreground">not</span> your Vercel domain. The Mini App URL above is what
+          users open inside Telegram.
         </p>
         <div>
           <label className="text-[10px] text-muted-foreground">Webhook URL</label>
@@ -271,7 +273,7 @@ export function AdminBotView() {
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
               className="h-8 text-xs flex-1"
-              placeholder="https://your-domain.com/api/bot"
+              placeholder="https://<project-ref>.supabase.co/functions/v1/telegram-webhook"
               data-testid="input-webhook-url"
             />
             {webhookUrl && (
@@ -280,6 +282,22 @@ export function AdminBotView() {
               </Button>
             )}
           </div>
+          {(() => {
+            const supaUrl = (import.meta as any).env?.VITE_SUPABASE_URL as string | undefined;
+            if (!supaUrl) return null;
+            const suggested = `${supaUrl.replace(/\/$/, "")}/functions/v1/telegram-webhook`;
+            if (webhookUrl === suggested) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => setWebhookUrl(suggested)}
+                className="mt-1 text-[10px] text-primary hover:underline"
+                data-testid="button-use-supabase-url"
+              >
+                Use Supabase function URL → {suggested}
+              </button>
+            );
+          })()}
         </div>
         <div>
           <label className="text-[10px] text-muted-foreground">Secret Token (optional, for webhook validation)</label>

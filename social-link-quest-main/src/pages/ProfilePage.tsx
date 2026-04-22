@@ -198,7 +198,18 @@ export function ProfilePage() {
 
           {/* Amount */}
           <div>
-            <p className="text-[11px] text-muted-foreground mb-1">{t("withdrawAmount")}</p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[11px] text-muted-foreground">{t("withdrawAmount")}</p>
+              {selectedBalance?.currencies && Number((selectedBalance.currencies as any).min_withdraw_amount || 0) > 0 && (
+                <p className="text-[10px] text-muted-foreground" data-testid="text-min-withdraw">
+                  {language === "ar" ? "الحد الأدنى" : "Min"}:{" "}
+                  <span className="text-primary font-medium tabular-nums">
+                    {Number((selectedBalance.currencies as any).min_withdraw_amount).toFixed(2)}{" "}
+                    {(selectedBalance.currencies as any).symbol}
+                  </span>
+                </p>
+              )}
+            </div>
             <div className="relative">
               <Input
                 type="number"
@@ -217,6 +228,15 @@ export function ProfilePage() {
                 </button>
               )}
             </div>
+            {selectedBalance?.currencies && Number((selectedBalance.currencies as any).max_withdraw_amount || 0) > 0 && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {language === "ar" ? "الحد الأقصى" : "Max"}:{" "}
+                <span className="tabular-nums">
+                  {Number((selectedBalance.currencies as any).max_withdraw_amount).toFixed(2)}{" "}
+                  {(selectedBalance.currencies as any).symbol}
+                </span>
+              </p>
+            )}
           </div>
 
           {/* Wallet address */}

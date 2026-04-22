@@ -46,7 +46,7 @@ const empty: TaskForm = {
   icon_url: "", metadata: {},
   verify_url: "", verify_method: "POST",
   verify_headers: "{}",
-  body_template: '{\n  "user_id": "{{user_id}}",\n  "code": "{{code}}"\n}',
+  body_template: '{\n  "token": "{{token}}",\n  "code": "{{code}}"\n}',
   success_key: "success", success_value: "true",
   max_completions: null, user_limit: 1,
 };
@@ -151,7 +151,7 @@ export function AdminTasksView() {
       verify_url: t.verify_url || "",
       verify_method: (t.verify_method || "POST") as "POST" | "GET",
       verify_headers: JSON.stringify(t.verify_headers || {}, null, 2),
-      body_template: JSON.stringify(t.body_template || { user_id: "{{user_id}}", code: "{{code}}" }, null, 2),
+      body_template: JSON.stringify(t.body_template || { token: "{{token}}", code: "{{code}}" }, null, 2),
       success_key: t.success_key || "success",
       success_value: t.success_value ?? "true",
       max_completions: t.max_completions ?? null,
@@ -304,7 +304,8 @@ export function AdminTasksView() {
               <p className="text-[10px] font-medium text-primary">External Code Verification</p>
               <p className="text-[10px] text-muted-foreground">
                 User visits the redirect URL, gets a one-time code, then submits it.
-                We POST it to your verify URL — placeholders <code>{`{{user_id}}`}</code> and <code>{`{{code}}`}</code> are replaced.
+                Placeholders replaced: <code>{`{{user_id}}`}</code>, <code>{`{{code}}`}</code>, and <code>{`{{token}}`}</code>{" "}
+                — a fresh secure session token is generated on every "Start" so each visit gets its own one-time code.
               </p>
               <div>
                 <label className="text-[10px] text-muted-foreground">Redirect URL (where user goes to get the code)</label>
@@ -312,7 +313,7 @@ export function AdminTasksView() {
                   value={editing.metadata?.redirect_url || ""}
                   onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, redirect_url: e.target.value } })}
                   className="h-8 text-xs"
-                  placeholder="https://partner.example.com/start?u={{user_id}}"
+                  placeholder="https://partner.example.com/start?token={{token}}"
                 />
               </div>
               <div className="grid grid-cols-3 gap-2">

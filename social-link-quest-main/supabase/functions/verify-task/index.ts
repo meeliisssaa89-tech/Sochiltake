@@ -254,15 +254,26 @@ async function handleCodeApi(
   const metadata = task.metadata || {};
   const redirectUrl: string | undefined = metadata.redirect_url;
 
-  // START → record pending and return the redirect URL.
+  // START → issue a secure session token, record pending, return personalised URL.
   if (action === 'start') {
     if (!existingTask) {
       await supabase.from('user_tasks').insert({
         user_id: userId, task_id: task.id, status: 'pending', started_at: new Date().toISOString(),
       });
     }
+
+    // Generate a cryptographically random token and persist it for this visit.
+    const token = generateToken();
+    await supabase.from('task_code_sessions').insert({
+      user_id: userId, task_id: task.id, token,
+    });
+
+    const finalUrl = redirectUrl
+      ? substitute(redirectUrl, { user_id: userId, token })
+      : redirectUrl;
+
     return new Response(
-      JSON.stringify({ status: 'started', url: redirectUrl }),
+      JSON.stringify({ status: 'started', url: finalUrl, token }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -358,19 +369,39 @@ async function handleCodeApi(
     }
   }
 
+  // Look up the most recent session token for this user/task (last 24h).
+  let sessionToken = '';
+  let sessionId: string | null = null;
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
+  const { data: sessionRow } = await supabase
+    .from('task_code_sessions')
+    .select('id, token')
+    .eq('user_id', userId)
+    .eq('task_id', task.id)
+    .is('used_at', null)
+    .gte('created_at', dayAgo)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (sessionRow) {
+    sessionToken = sessionRow.token;
+    sessionId = sessionRow.id;
+  }
+
   // Build outbound request.
   const method = (task.verify_method || 'POST').toUpperCase();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const vars = { user_id: userId, code: trimmedCode, token: sessionToken };
   if (task.verify_headers && typeof task.verify_headers === 'object') {
     for (const [k, v] of Object.entries(task.verify_headers)) {
-      headers[k] = substitute(String(v), { user_id: userId, code: trimmedCode });
+      headers[k] = substitute(String(v), vars);
     }
   }
 
   const bodyTemplate = task.body_template ?? {};
-  const body = substituteDeep(bodyTemplate, { user_id: userId, code: trimmedCode });
+  const body = substituteDeep(bodyTemplate, vars);
 
-  let outboundUrl = substitute(verifyUrl, { user_id: userId, code: trimmedCode });
+  let outboundUrl = substitute(verifyUrl, vars);
   let init: RequestInit = { method, headers };
 
   if (method === 'GET' || method === 'HEAD') {
@@ -434,7 +465,22 @@ async function handleCodeApi(
     );
   }
 
+  // Burn the session token so it can't be reused.
+  if (sessionId) {
+    await supabase
+      .from('task_code_sessions')
+      .update({ used_at: new Date().toISOString() })
+      .eq('id', sessionId);
+  }
+
   return await completeTask(supabase, userId, task, existingTask);
+}
+
+function generateToken(): string {
+  // 32 random bytes → 64-char hex string. Cryptographically secure.
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 function substitute(s: string, vars: Record<string, string>): string {
