@@ -229,7 +229,7 @@ export function SpinWheel() {
         setWonLabel(prize.label);
         hapticNotification("success");
         toast({
-          title: `🎉 ${prize.label}`,
+          title: `🎉🎁 ${prize.label}`,
           description: prize.amount > 0 ? `+${prize.amount}` : "Better luck next time!",
         });
         refreshUser();
