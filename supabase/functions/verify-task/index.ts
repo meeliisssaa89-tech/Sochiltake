@@ -516,19 +516,38 @@ async function completeTask(supabase: any, userId: string, task: any, existingTa
     });
   }
 
+  // Build full reward list: primary reward + any extra_rewards.
+  const allRewards: Array<{ currency_id: string; amount: number }> = [];
   if (task.reward_amount > 0 && task.reward_currency_id) {
+    allRewards.push({ currency_id: task.reward_currency_id, amount: Number(task.reward_amount) });
+  }
+  if (Array.isArray(task.extra_rewards)) {
+    for (const r of task.extra_rewards) {
+      const cid = r?.currency_id;
+      const amt = Number(r?.amount || 0);
+      if (cid && amt > 0) allRewards.push({ currency_id: cid, amount: amt });
+    }
+  }
+
+  // Merge duplicates (same currency added twice) so we only do one upsert per currency.
+  const merged: Record<string, number> = {};
+  for (const r of allRewards) {
+    merged[r.currency_id] = (merged[r.currency_id] || 0) + r.amount;
+  }
+
+  for (const [currencyId, addAmount] of Object.entries(merged)) {
     const { data: balance } = await supabase
       .from('balances')
       .select('amount')
       .eq('user_id', userId)
-      .eq('currency_id', task.reward_currency_id)
+      .eq('currency_id', currencyId)
       .maybeSingle();
 
-    const newAmount = Number(balance?.amount || 0) + Number(task.reward_amount);
+    const newAmount = Number(balance?.amount || 0) + Number(addAmount);
     await supabase
       .from('balances')
       .upsert(
-        { user_id: userId, currency_id: task.reward_currency_id, amount: newAmount },
+        { user_id: userId, currency_id: currencyId, amount: newAmount },
         { onConflict: 'user_id,currency_id' }
       );
   }

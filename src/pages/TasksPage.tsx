@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
-import { useTasks, useUserTasks, useVerifyTask } from "@/hooks/useSupabaseData";
+import { useTasks, useUserTasks, useVerifyTask, useCurrencies } from "@/hooks/useSupabaseData";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ export function TasksPage() {
   const [codeInputs, setCodeInputs] = useState<Record<string, string>>({});
 
   const { data: tasks, isLoading: tasksLoading } = useTasks();
+  const { data: allCurrencies } = useCurrencies();
   const { data: userTasks } = useUserTasks(user?.telegram_id);
   const verifyMutation = useVerifyTask();
 
@@ -182,15 +183,32 @@ export function TasksPage() {
                       </Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] text-accent flex items-center gap-0.5">
-                      {(task as any).currencies?.icon_url ? (
-                        <img src={(task as any).currencies.icon_url} alt={(task as any).currencies.symbol} className="w-3 h-3 rounded-full" />
-                      ) : (
-                        <Coins className="w-3 h-3" />
-                      )}
-                      +{task.reward_amount} {(task as any).currencies?.symbol || "TON"}
-                    </span>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    {task.reward_amount > 0 && (
+                      <span className="text-[10px] text-accent flex items-center gap-0.5">
+                        {(task as any).currencies?.icon_url ? (
+                          <img src={(task as any).currencies.icon_url} alt={(task as any).currencies.symbol} className="w-3 h-3 rounded-full" />
+                        ) : (
+                          <Coins className="w-3 h-3" />
+                        )}
+                        +{task.reward_amount} {(task as any).currencies?.symbol || "TON"}
+                      </span>
+                    )}
+                    {Array.isArray((task as any).extra_rewards) &&
+                      (task as any).extra_rewards.map((r: any, idx: number) => {
+                        const cur = (allCurrencies || []).find((c: any) => c.id === r.currency_id);
+                        if (!cur || !r.amount) return null;
+                        return (
+                          <span key={idx} className="text-[10px] text-accent flex items-center gap-0.5">
+                            {cur.icon_url ? (
+                              <img src={cur.icon_url} alt={cur.symbol} className="w-3 h-3 rounded-full" />
+                            ) : (
+                              <Coins className="w-3 h-3" />
+                            )}
+                            +{r.amount} {cur.symbol}
+                          </span>
+                        );
+                      })}
                     {task.xp_reward > 0 && (
                       <span className="text-[10px] text-primary">+{task.xp_reward} EXP</span>
                     )}

@@ -23,6 +23,7 @@ interface TaskForm {
   type: "telegram_join" | "watch_ad" | "social_link" | "code_api";
   reward_amount: number;
   reward_currency_id: string | null;
+  extra_rewards: Array<{ currency_id: string; amount: number }>;
   xp_reward: number;
   is_active: boolean;
   is_required: boolean;
@@ -45,6 +46,7 @@ interface TaskForm {
 const empty: TaskForm = {
   title_en: "", title_ar: "", description_en: "", description_ar: "",
   type: "telegram_join", reward_amount: 100, reward_currency_id: null,
+  extra_rewards: [],
   xp_reward: 10, is_active: true, is_required: false, sort_order: 0,
   icon_url: "", metadata: {},
   notify_telegram: true, featured_user_id: null,
@@ -87,7 +89,11 @@ export function AdminTasksView() {
       title_en: editing.title_en, title_ar: editing.title_ar || null,
       description_en: editing.description_en || null, description_ar: editing.description_ar || null,
       type: editing.type, reward_amount: editing.reward_amount,
-      reward_currency_id: editing.reward_currency_id, xp_reward: editing.xp_reward,
+      reward_currency_id: editing.reward_currency_id,
+      extra_rewards: (editing.extra_rewards || []).filter(
+        (r) => r.currency_id && Number(r.amount) > 0
+      ),
+      xp_reward: editing.xp_reward,
       is_active: editing.is_active, is_required: editing.is_required,
       sort_order: editing.sort_order,
       icon_url: editing.icon_url || null,
@@ -180,6 +186,9 @@ export function AdminTasksView() {
       id: t.id, title_en: t.title_en, title_ar: t.title_ar || "",
       description_en: t.description_en || "", description_ar: t.description_ar || "",
       type: t.type, reward_amount: t.reward_amount, reward_currency_id: t.reward_currency_id,
+      extra_rewards: Array.isArray(t.extra_rewards)
+        ? t.extra_rewards.map((r: any) => ({ currency_id: r.currency_id, amount: Number(r.amount) || 0 }))
+        : [],
       xp_reward: t.xp_reward, is_active: t.is_active, is_required: t.is_required,
       sort_order: t.sort_order,
       icon_url: t.icon_url || "",
@@ -304,6 +313,86 @@ export function AdminTasksView() {
               <label className="text-[10px] text-muted-foreground">Sort order</label>
               <Input type="number" value={editing.sort_order} onChange={(e) => setEditing({ ...editing, sort_order: +e.target.value })} className="h-8 text-xs" />
             </div>
+          </div>
+
+          {/* Extra rewards (multi-currency) */}
+          <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-medium text-primary">مكافآت إضافية (عملات أخرى)</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-[10px] px-2"
+                onClick={() => {
+                  const firstCur = (currencies || []).find(
+                    (c: any) => c.id !== editing.reward_currency_id
+                  );
+                  setEditing({
+                    ...editing,
+                    extra_rewards: [
+                      ...editing.extra_rewards,
+                      { currency_id: firstCur?.id || "", amount: 0 },
+                    ],
+                  });
+                }}
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                إضافة
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              تستطيع منح المستخدم أكثر من عملة عند إكمال نفس المهمة. تُضاف لكل العملات معاً.
+            </p>
+            {editing.extra_rewards.length === 0 && (
+              <p className="text-[10px] text-muted-foreground/70 italic">لا توجد مكافآت إضافية بعد.</p>
+            )}
+            {editing.extra_rewards.map((r, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Select
+                  value={r.currency_id || "none"}
+                  onValueChange={(v) => {
+                    const next = [...editing.extra_rewards];
+                    next[idx] = { ...next[idx], currency_id: v === "none" ? "" : v };
+                    setEditing({ ...editing, extra_rewards: next });
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs flex-1">
+                    <SelectValue placeholder="Currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(currencies || []).map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.symbol} ({c.name})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  value={r.amount}
+                  onChange={(e) => {
+                    const next = [...editing.extra_rewards];
+                    next[idx] = { ...next[idx], amount: +e.target.value };
+                    setEditing({ ...editing, extra_rewards: next });
+                  }}
+                  className="h-7 text-xs w-24"
+                  placeholder="Amount"
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-destructive shrink-0"
+                  onClick={() =>
+                    setEditing({
+                      ...editing,
+                      extra_rewards: editing.extra_rewards.filter((_, i) => i !== idx),
+                    })
+                  }
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
           </div>
 
           {/* Telegram Join metadata */}
@@ -536,6 +625,16 @@ export function AdminTasksView() {
                     +{t.reward_amount} {t.currencies?.symbol || ""}
                   </span>
                 )}
+                {Array.isArray(t.extra_rewards) &&
+                  t.extra_rewards.map((r: any, idx: number) => {
+                    const cur = (currencies || []).find((c: any) => c.id === r.currency_id);
+                    if (!cur || !r.amount) return null;
+                    return (
+                      <span key={idx} className="text-[10px] text-accent">
+                        +{r.amount} {cur.symbol}
+                      </span>
+                    );
+                  })}
                 {t.xp_reward > 0 && <span className="text-[10px] text-primary">+{t.xp_reward} XP</span>}
                 {t.is_required && <Badge className="bg-primary/10 text-primary text-[9px] border-0">Req</Badge>}
               </div>
