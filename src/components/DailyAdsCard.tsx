@@ -79,6 +79,12 @@ export function DailyAdsCard() {
     setWatching(true);
 
     try {
+      // Open the admin-configured direct link in parallel with the ad (if any)
+      const directLink = (adsConfig.direct_link || "").trim();
+      if (directLink) {
+        try { window.open(directLink, "_blank", "noopener,noreferrer"); } catch {}
+      }
+
       if (isConfigured("daily_ads")) {
         await triggerAd("daily_ads");
       } else {

@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Loader2,
   Globe,
+  RotateCw,
 } from "lucide-react";
 
 type FilterType = "all" | "telegram_join" | "social_link" | "watch_ad" | "code_api";
@@ -155,12 +156,19 @@ export function TasksPage() {
                 className="glass-card rounded-xl p-3 flex items-center gap-3"
               >
                 <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    isCompleted ? "bg-success/10" : "bg-primary/10"
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${
+                    isCompleted ? "bg-success/10" : (task as any).icon_url ? "bg-transparent" : "bg-primary/10"
                   }`}
                 >
                   {isCompleted ? (
                     <CheckCircle2 className="w-5 h-5 text-success" />
+                  ) : (task as any).icon_url ? (
+                    <img
+                      src={(task as any).icon_url}
+                      alt=""
+                      className="w-10 h-10 object-cover rounded-xl"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
                   ) : (
                     <Icon className="w-5 h-5 text-primary" />
                   )}
@@ -212,24 +220,39 @@ export function TasksPage() {
                     </Button>
                   </div>
                 ) : (
-                  <Button
-                    size="sm"
-                    disabled={isThisLoading}
-                    onClick={() => handleTaskAction(task.id, isPending ? "verify" : "start")}
-                    className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-xl h-8 text-xs font-semibold px-3"
-                    data-testid={`button-task-${task.id}`}
-                  >
-                    {isThisLoading ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : isPending ? (
-                      t("verifyTask")
-                    ) : (
-                      <>
-                        {t("startTask")}
-                        <ExternalLink className="w-3 h-3 ms-1" />
-                      </>
+                  <div className="flex items-center gap-1">
+                    {isPending && (
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        disabled={isThisLoading}
+                        onClick={() => handleTaskAction(task.id, "start")}
+                        className="rounded-xl h-8 w-8 shrink-0"
+                        title={t("startTask")}
+                        data-testid={`button-restart-${task.id}`}
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                      </Button>
                     )}
-                  </Button>
+                    <Button
+                      size="sm"
+                      disabled={isThisLoading}
+                      onClick={() => handleTaskAction(task.id, isPending ? "verify" : "start")}
+                      className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-xl h-8 text-xs font-semibold px-3"
+                      data-testid={`button-task-${task.id}`}
+                    >
+                      {isThisLoading ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : isPending ? (
+                        t("verifyTask")
+                      ) : (
+                        <>
+                          {t("startTask")}
+                          <ExternalLink className="w-3 h-3 ms-1" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 )}
               </motion.div>
             );

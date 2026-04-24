@@ -23,6 +23,7 @@ interface AdsConfig {
   xp_per_ad: number;
   duration_seconds: number;
   enabled: boolean;
+  direct_link: string;
 }
 
 interface ButtonBindings {
@@ -68,6 +69,7 @@ export function AdminAdsView() {
     reward_per_ad: 10,
     xp_per_ad: 5,
     duration_seconds: 15,
+    direct_link: "",
   });
   const [rewardCurrencySymbol, setRewardCurrencySymbol] = useState<string>("");
 
@@ -184,6 +186,19 @@ export function AdminAdsView() {
             <label className="text-[10px] text-muted-foreground">Fallback duration (s)</label>
             <Input type="number" value={ads.duration_seconds} onChange={(e) => setAds({ ...ads, duration_seconds: +e.target.value })} className="h-8" />
           </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] text-muted-foreground font-medium">Direct Link (optional)</label>
+          <p className="text-[9px] text-muted-foreground/70 mb-1">
+            عند الضغط على "مشاهدة إعلان" يفتح هذا الرابط في تبويب جديد بالتوازي مع تشغيل الإعلانات. اتركه فارغًا للتعطيل.
+          </p>
+          <Input
+            value={ads.direct_link}
+            onChange={(e) => setAds({ ...ads, direct_link: e.target.value })}
+            placeholder="https://example.com/your-direct-link"
+            className="h-8 text-xs"
+          />
         </div>
 
         <div>
