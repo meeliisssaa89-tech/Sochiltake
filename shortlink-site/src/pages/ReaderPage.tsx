@@ -240,7 +240,7 @@ function CodeReveal({
     <div className="card text-center fade-in">
       <div className="mx-auto mb-3 h-14 w-14 rounded-full flex items-center justify-center text-white text-2xl"
         style={{ background: "var(--brand-color)" }}>
-        ✓
+        ✓..
       </div>
       <h2 className="text-xl font-bold mb-2">You're done!</h2>
       <p className="text-sm text-gray-600 mb-5">
