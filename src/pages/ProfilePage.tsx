@@ -14,6 +14,7 @@ import { Languages, ArrowUpRight, Loader2, X, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLivePrices, getLiveRate } from "@/hooks/useLivePrices";
 import { TON_ICON, USDT_ICON } from "@/hooks/useTonConnect";
+import { PublisherCard } from "@/components/PublisherCard";
 
 interface Token {
   id: string;
@@ -151,6 +152,9 @@ export function ProfilePage() {
           </div>
         </div>
       </motion.div>
+
+      {/* Publisher (shortlink-site) section — hidden unless admin enables */}
+      <PublisherCard />
 
       {/* Withdraw form */}
       {showWithdrawForm && (

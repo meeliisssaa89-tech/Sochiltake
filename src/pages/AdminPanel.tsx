@@ -22,15 +22,16 @@ import { AdminWithdrawalsView } from "@/components/admin/AdminWithdrawalsView";
 import { AdminActivityView } from "@/components/admin/AdminActivityView";
 import { AdminPromoCodesView } from "@/components/admin/AdminPromoCodesView";
 import { AdminBotView } from "@/components/admin/AdminBotView";
+import { AdminShortlinkView } from "@/components/admin/AdminShortlinkView";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import {
   LayoutDashboard, Users, ListChecks, Coins, Settings, Search, Ban, ArrowLeft,
   TrendingUp, DollarSign, CheckCircle2, UserPlus, Image as ImageIcon, Send,
-  Sparkles, Wallet, Upload, Loader2, Trophy, Tag, Bot,
+  Sparkles, Wallet, Upload, Loader2, Trophy, Tag, Bot, ExternalLink,
   X, Plus, Minus, Trash2, Activity, Star, Shield, ChevronRight,
 } from "lucide-react";
 
-type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo" | "bot";
+type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo" | "bot" | "shortlink";
 
 export function AdminPanel() {
   const [session, setSession] = useState<any>(null);
@@ -142,6 +143,7 @@ function AdminPanelInner({ adminEmail }: { adminEmail: string }) {
     { id: "icons" as const, icon: ImageIcon, label: t("appearance") },
     { id: "broadcast" as const, icon: Send, label: t("broadcast") },
     { id: "bot" as const, icon: Bot, label: t("bot") },
+    { id: "shortlink" as const, icon: ExternalLink, label: "Shortlink" },
     { id: "settings" as const, icon: Settings, label: t("settings") },
     { id: "admins" as const, icon: Shield, label: "Admin Access" },
   ];
@@ -193,6 +195,7 @@ function AdminPanelInner({ adminEmail }: { adminEmail: string }) {
         {activeTab === "icons" && <AdminIconsView />}
         {activeTab === "broadcast" && <AdminBroadcastView />}
         {activeTab === "bot" && <AdminBotView />}
+        {activeTab === "shortlink" && <AdminShortlinkView />}
         {activeTab === "settings" && <AdminSettingsView />}
         {activeTab === "admins" && <AdminAccessView currentEmail={adminEmail} />}
       </div>

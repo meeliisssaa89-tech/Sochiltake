@@ -129,6 +129,272 @@ Deno.serve(async (req) => {
         return json({ ok: true });
       }
 
+      // ====== Shortlink site admin actions =====================================
+      // Everything is namespaced `shortlink_*` so it stays separated from the main
+      // app's controls and cannot accidentally affect the existing features.
+
+      case 'shortlink_get_settings': {
+        const { data } = await admin.from('shortlink_settings').select('*').eq('id', 1).maybeSingle();
+        if (!data) {
+          await admin.from('shortlink_settings').insert({ id: 1 });
+          const { data: fresh } = await admin.from('shortlink_settings').select('*').eq('id', 1).maybeSingle();
+          return json({ settings: fresh || {} });
+        }
+        return json({ settings: data });
+      }
+
+      case 'shortlink_save_settings': {
+        const allowed = [
+          'page_count', 'wait_seconds',
+          'ai_provider', 'ai_api_key', 'ai_model', 'ai_image_model', 'ai_topics', 'ai_language',
+          'site_title', 'brand_color', 'site_url',
+          'ad_head_html', 'ad_top_html', 'ad_middle_html', 'ad_bottom_html', 'ad_interstitial_html',
+          'publishers_enabled', 'payouts_enabled', 'signup_enabled', 'articles_require_approval',
+          'revenue_per_visit', 'min_payout', 'payout_currency_id', 'signup_bonus',
+        ];
+        const update: Record<string, unknown> = {};
+        for (const k of allowed) {
+          if (payload && Object.prototype.hasOwnProperty.call(payload, k)) {
+            update[k] = (payload as any)[k];
+          }
+        }
+        if (Object.keys(update).length === 0) return json({ ok: true });
+        update.updated_at = new Date().toISOString();
+        const { error } = await admin.from('shortlink_settings').update(update).eq('id', 1);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case 'shortlink_list_publishers': {
+        const { data, error } = await admin
+          .from('shortlink_publishers')
+          .select('id, email, display_name, link_code, linked_telegram_id, pending_balance, lifetime_earnings, total_visits, is_blocked, created_at, linked_at')
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (error) return json({ error: error.message }, 400);
+        return json({ publishers: data || [] });
+      }
+
+      case 'shortlink_set_publisher_blocked': {
+        const id = String(payload?.id || '');
+        const blocked = !!payload?.blocked;
+        if (!id) return json({ error: 'id required' }, 400);
+        const { error } = await admin
+          .from('shortlink_publishers')
+          .update({ is_blocked: blocked })
+          .eq('id', id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case 'shortlink_delete_publisher': {
+        const id = String(payload?.id || '');
+        if (!id) return json({ error: 'id required' }, 400);
+        const { error } = await admin.from('shortlink_publishers').delete().eq('id', id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case 'shortlink_unlink_publisher': {
+        const id = String(payload?.id || '');
+        if (!id) return json({ error: 'id required' }, 400);
+        const { error } = await admin
+          .from('shortlink_publishers')
+          .update({ linked_telegram_id: null, linked_at: null })
+          .eq('id', id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case 'shortlink_list_articles': {
+        const status = String(payload?.status || '');
+        let q = admin
+          .from('shortlink_pub_articles')
+          .select('*, shortlink_publishers!inner(email, display_name, linked_telegram_id)')
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (status) q = q.eq('status', status);
+        const { data, error } = await q;
+        if (error) return json({ error: error.message }, 400);
+        return json({ articles: data || [] });
+      }
+
+      case 'shortlink_set_article_status': {
+        const id = String(payload?.id || '');
+        const status = String(payload?.status || '');
+        const reason = payload?.reason ? String(payload.reason) : null;
+        if (!id || !['pending', 'approved', 'rejected'].includes(status)) {
+          return json({ error: 'id and valid status required' }, 400);
+        }
+        const { error } = await admin
+          .from('shortlink_pub_articles')
+          .update({
+            status,
+            rejection_reason: status === 'rejected' ? reason : null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case 'shortlink_delete_article': {
+        const id = String(payload?.id || '');
+        if (!id) return json({ error: 'id required' }, 400);
+        const { error } = await admin.from('shortlink_pub_articles').delete().eq('id', id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case 'shortlink_list_payouts': {
+        const status = String(payload?.status || '');
+        let q = admin
+          .from('shortlink_payouts')
+          .select('*, shortlink_publishers!inner(email, display_name), currencies(symbol, name, icon_url)')
+          .order('requested_at', { ascending: false })
+          .limit(500);
+        if (status) q = q.eq('status', status);
+        const { data, error } = await q;
+        if (error) return json({ error: error.message }, 400);
+        return json({ payouts: data || [] });
+      }
+
+      case 'shortlink_approve_payout': {
+        const id = String(payload?.id || '');
+        if (!id) return json({ error: 'id required' }, 400);
+
+        // Load the payout
+        const { data: pay } = await admin
+          .from('shortlink_payouts')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        if (!pay) return json({ error: 'Payout not found' }, 404);
+        if (pay.status !== 'pending') return json({ error: `Already ${pay.status}` }, 400);
+
+        // Load settings to find the payout currency (fallback to the payout's currency_id).
+        const { data: sl } = await admin
+          .from('shortlink_settings')
+          .select('payout_currency_id')
+          .eq('id', 1)
+          .maybeSingle();
+        const currencyId = pay.currency_id || sl?.payout_currency_id;
+        if (!currencyId) {
+          return json({ error: 'Payout currency not configured' }, 400);
+        }
+
+        // Credit the user's main app balance.
+        const { data: bal } = await admin
+          .from('balances')
+          .select('id, amount')
+          .eq('user_id', pay.telegram_id)
+          .eq('currency_id', currencyId)
+          .maybeSingle();
+
+        const addAmount = Number(pay.amount);
+        if (bal?.id) {
+          const { error: e1 } = await admin
+            .from('balances')
+            .update({ amount: Number(bal.amount) + addAmount })
+            .eq('id', bal.id);
+          if (e1) return json({ error: e1.message }, 400);
+        } else {
+          const { error: e2 } = await admin
+            .from('balances')
+            .insert({ user_id: pay.telegram_id, currency_id: currencyId, amount: addAmount });
+          if (e2) return json({ error: e2.message }, 400);
+        }
+
+        // Bump publisher's lifetime_earnings.
+        await admin.rpc; // no-op placeholder
+        const { data: pub2 } = await admin
+          .from('shortlink_publishers')
+          .select('lifetime_earnings')
+          .eq('id', pay.publisher_id)
+          .maybeSingle();
+        if (pub2) {
+          await admin
+            .from('shortlink_publishers')
+            .update({ lifetime_earnings: Number(pub2.lifetime_earnings || 0) + addAmount })
+            .eq('id', pay.publisher_id);
+        }
+
+        // Mark payout as approved.
+        const { error: e3 } = await admin
+          .from('shortlink_payouts')
+          .update({
+            status: 'approved',
+            currency_id: currencyId,
+            processed_at: new Date().toISOString(),
+            admin_note: payload?.note ? String(payload.note) : null,
+          })
+          .eq('id', id);
+        if (e3) return json({ error: e3.message }, 400);
+
+        return json({ ok: true });
+      }
+
+      case 'shortlink_reject_payout': {
+        const id = String(payload?.id || '');
+        if (!id) return json({ error: 'id required' }, 400);
+
+        const { data: pay } = await admin
+          .from('shortlink_payouts')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        if (!pay) return json({ error: 'Payout not found' }, 404);
+        if (pay.status !== 'pending') return json({ error: `Already ${pay.status}` }, 400);
+
+        // Refund the publisher's pending_balance.
+        const { data: pub3 } = await admin
+          .from('shortlink_publishers')
+          .select('pending_balance')
+          .eq('id', pay.publisher_id)
+          .maybeSingle();
+        if (pub3) {
+          await admin
+            .from('shortlink_publishers')
+            .update({ pending_balance: Number(pub3.pending_balance || 0) + Number(pay.amount) })
+            .eq('id', pay.publisher_id);
+        }
+
+        const { error } = await admin
+          .from('shortlink_payouts')
+          .update({
+            status: 'rejected',
+            processed_at: new Date().toISOString(),
+            admin_note: payload?.note ? String(payload.note) : null,
+          })
+          .eq('id', id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      case 'shortlink_stats': {
+        const [pubsTotal, pubsLinked, articlesTotal, articlesPending, visits, payoutsPending, payoutsPaidSum] = await Promise.all([
+          admin.from('shortlink_publishers').select('id', { count: 'exact', head: true }),
+          admin.from('shortlink_publishers').select('id', { count: 'exact', head: true }).not('linked_telegram_id', 'is', null),
+          admin.from('shortlink_pub_articles').select('id', { count: 'exact', head: true }),
+          admin.from('shortlink_pub_articles').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          admin.from('shortlink_pub_visits').select('id', { count: 'exact', head: true }),
+          admin.from('shortlink_payouts').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          admin.from('shortlink_payouts').select('amount').eq('status', 'approved'),
+        ]);
+        const paidSum = (payoutsPaidSum.data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+        return json({
+          stats: {
+            publishers_total: pubsTotal.count || 0,
+            publishers_linked: pubsLinked.count || 0,
+            articles_total: articlesTotal.count || 0,
+            articles_pending: articlesPending.count || 0,
+            visits_total: visits.count || 0,
+            payouts_pending: payoutsPending.count || 0,
+            payouts_paid_total: paidSum,
+          },
+        });
+      }
+
       default:
         return json({ error: `Unknown action: ${action}` }, 400);
     }
