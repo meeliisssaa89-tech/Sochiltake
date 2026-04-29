@@ -12,7 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AppIcon } from "@/components/AppIcon";
-import { Plus, Trash2, Save, Edit2, X, Upload, Loader2, Star } from "lucide-react";
+import { Plus, Trash2, Save, Edit2, X, Upload, Loader2, Star, FileText, Search, Link2, ExternalLink } from "lucide-react";
+import { adminAction } from "@/lib/adminAuth";
+import { useQuery } from "@tanstack/react-query";
 
 interface TaskForm {
   id?: string;
@@ -41,6 +43,7 @@ interface TaskForm {
   success_value: string;
   max_completions: number | null;
   user_limit: number;
+  publisher_article_id: string | null;
 }
 
 const empty: TaskForm = {
@@ -55,6 +58,7 @@ const empty: TaskForm = {
   body_template: '{\n  "token": "{{token}}",\n  "code": "{{code}}"\n}',
   success_key: "success", success_value: "true",
   max_completions: null, user_limit: 1,
+  publisher_article_id: null,
 };
 
 export function AdminTasksView() {
@@ -118,11 +122,13 @@ export function AdminTasksView() {
       payload.success_value = editing.success_value.trim() || "true";
       payload.max_completions = editing.max_completions || null;
       payload.user_limit = editing.user_limit ?? 1;
+      payload.publisher_article_id = editing.publisher_article_id || null;
     } else {
       payload.verify_url = null;
       payload.verify_method = null;
       payload.verify_headers = {};
       payload.body_template = {};
+      payload.publisher_article_id = null;
     }
     let err;
     const isNew = !editing.id;
@@ -201,6 +207,9 @@ export function AdminTasksView() {
       success_value: t.success_value ?? "true",
       max_completions: t.max_completions ?? null,
       user_limit: t.user_limit ?? 1,
+      publisher_article_id: t.publisher_article_id || null,
+      notify_telegram: t.notify_telegram ?? true,
+      featured_user_id: t.featured_user_id ?? null,
     });
     setShowForm(true);
   };
@@ -432,6 +441,40 @@ export function AdminTasksView() {
                 Placeholders replaced: <code>{`{{user_id}}`}</code>, <code>{`{{code}}`}</code>, and <code>{`{{token}}`}</code>{" "}
                 — a fresh secure session token is generated on every "Start" so each visit gets its own one-time code.
               </p>
+
+              <PublisherArticlePicker
+                value={editing.publisher_article_id}
+                onPick={(article, siteUrl) => {
+                  if (!article) {
+                    setEditing({ ...editing, publisher_article_id: null });
+                    return;
+                  }
+                  const base = (siteUrl || "").replace(/\/$/, "");
+                  setEditing({
+                    ...editing,
+                    publisher_article_id: article.id,
+                    metadata: {
+                      ...editing.metadata,
+                      redirect_url: `${base}/p/${article.slug}?u={{user_id}}&t={{token}}`,
+                      publisher_article_slug: article.slug,
+                      publisher_article_title: article.title,
+                    },
+                    verify_url: `${base}/api/p/verify`,
+                    verify_method: "POST",
+                    verify_headers: "{}",
+                    body_template: JSON.stringify({
+                      user_id: "{{user_id}}",
+                      code: "{{code}}",
+                      token: "{{token}}",
+                      slug: article.slug,
+                    }, null, 2),
+                    success_key: "success",
+                    success_value: "true",
+                  });
+                  toast({ title: "Article linked", description: "Verification fields auto-filled." });
+                }}
+              />
+
               <div>
                 <label className="text-[10px] text-muted-foreground">Redirect URL (where user goes to get the code)</label>
                 <Input
@@ -648,6 +691,167 @@ export function AdminTasksView() {
             </Button>
           </div>
         ))
+      )}
+    </div>
+  );
+}
+
+// ─── Publisher article picker (used inside code-task editor) ──────────
+interface PubArticle {
+  id: string;
+  slug: string;
+  title: string;
+  status: string;
+  visit_count?: number;
+  earnings?: number;
+  cover_url?: string | null;
+  shortlink_publishers?: { email?: string; display_name?: string };
+}
+
+function PublisherArticlePicker({
+  value,
+  onPick,
+}: {
+  value: string | null;
+  onPick: (article: PubArticle | null, siteUrl: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["shortlink-published-articles"],
+    queryFn: async () =>
+      adminAction<{ articles: PubArticle[]; site_url: string }>(
+        "shortlink_list_published_articles",
+        { limit: 100 }
+      ),
+    enabled: open || !!value,
+  });
+
+  const articles = data?.articles || [];
+  const siteUrl = data?.site_url || "";
+  const linked = value ? articles.find((a) => a.id === value) : null;
+
+  const filtered = q.trim()
+    ? articles.filter(
+        (a) =>
+          a.title.toLowerCase().includes(q.toLowerCase()) ||
+          a.slug.toLowerCase().includes(q.toLowerCase())
+      )
+    : articles;
+
+  return (
+    <div className="space-y-1.5 p-2 rounded-lg border border-primary/20 bg-primary/5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+          <p className="text-[11px] font-semibold text-primary truncate">
+            {linked
+              ? `Linked to: ${linked.title}`
+              : "Link this task to a publisher article (optional)"}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {linked && siteUrl && (
+            <a
+              href={`${siteUrl}/p/${linked.slug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="h-6 w-6 inline-flex items-center justify-center hover:bg-secondary rounded"
+              title="Open article"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+          {linked && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[10px] text-destructive"
+              onClick={() => onPick(null, siteUrl)}
+              data-testid="button-unlink-article"
+            >
+              <X className="w-3 h-3 me-1" /> Unlink
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={linked ? "outline" : "default"}
+            className="h-6 px-2 text-[10px]"
+            onClick={() => setOpen((v) => !v)}
+            data-testid="button-toggle-article-picker"
+          >
+            <Link2 className="w-3 h-3 me-1" />
+            {linked ? "Change" : "Pick article"}
+          </Button>
+        </div>
+      </div>
+
+      {linked && siteUrl && (
+        <p className="text-[10px] text-muted-foreground font-mono truncate">
+          {siteUrl}/p/{linked.slug}
+        </p>
+      )}
+
+      {open && (
+        <div className="space-y-1.5 pt-1.5 border-t border-primary/10">
+          <div className="relative">
+            <Search className="w-3 h-3 absolute start-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search articles…"
+              className="h-7 text-[11px] ps-7"
+              data-testid="input-search-articles"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {isLoading && (
+              <p className="text-[10px] text-muted-foreground text-center py-3">
+                <Loader2 className="w-3 h-3 inline animate-spin me-1" />
+                Loading…
+              </p>
+            )}
+            {!isLoading && filtered.length === 0 && (
+              <p className="text-[10px] text-muted-foreground text-center py-3">
+                No approved articles found.
+              </p>
+            )}
+            {filtered.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => {
+                  onPick(a, siteUrl);
+                  setOpen(false);
+                  setQ("");
+                }}
+                className="w-full flex items-center gap-2 p-1.5 rounded-md hover:bg-secondary text-start"
+                data-testid={`button-pick-article-${a.id}`}
+              >
+                {a.cover_url ? (
+                  <img
+                    src={a.cover_url}
+                    alt=""
+                    className="w-8 h-8 object-cover rounded shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded bg-secondary flex items-center justify-center shrink-0">
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-medium truncate">{a.title}</p>
+                  <p className="text-[9px] text-muted-foreground truncate">
+                    /p/{a.slug} · {a.shortlink_publishers?.email}
+                  </p>
+                </div>
+                {value === a.id && (
+                  <Star className="w-3 h-3 text-primary fill-primary shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

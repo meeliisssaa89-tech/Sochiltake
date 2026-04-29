@@ -17,7 +17,7 @@ prefixed tables; the Telegram app uses everything else.
 ### Unified Admin Control
 The shortlink-site admin (was its own page at `/admin`) is now also fully
 controllable from the Telegram app's existing AdminPanel under a new
-**Shortlink** tab. That tab has six sub-views: Settings, Ad Slots, Publishers,
+**Shortlink** tab. That tab has seven sub-views: Settings, Ad Slots, AI Models, Publishers,
 Articles, Payouts, Stats — see `src/components/admin/AdminShortlinkView.tsx`.
 
 Admin actions reach the shortlink data via the existing `admin-action` edge

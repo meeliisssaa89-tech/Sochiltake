@@ -13,9 +13,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Save, Settings, FileText, Users, DollarSign, BarChart3, MonitorPlay,
   CheckCircle2, XCircle, Trash2, Lock, Unlock, ExternalLink, Copy, Loader2,
+  Sparkles, Plus, Star, Edit2,
 } from "lucide-react";
 
-type SubTab = "settings" | "ads" | "publishers" | "articles" | "payouts" | "stats";
+type SubTab = "settings" | "ads" | "ai" | "publishers" | "articles" | "payouts" | "stats";
 
 export function AdminShortlinkView() {
   const [tab, setTab] = useState<SubTab>("settings");
@@ -23,6 +24,7 @@ export function AdminShortlinkView() {
   const tabs: { id: SubTab; label: string; icon: any }[] = [
     { id: "settings", label: "Settings", icon: Settings },
     { id: "ads", label: "Ad Slots", icon: MonitorPlay },
+    { id: "ai", label: "AI Models", icon: Sparkles },
     { id: "publishers", label: "Publishers", icon: Users },
     { id: "articles", label: "Articles", icon: FileText },
     { id: "payouts", label: "Payouts", icon: DollarSign },
@@ -58,6 +60,7 @@ export function AdminShortlinkView() {
 
       {tab === "settings" && <SettingsView />}
       {tab === "ads" && <AdsView />}
+      {tab === "ai" && <AiModelsView />}
       {tab === "publishers" && <PublishersView />}
       {tab === "articles" && <ArticlesView />}
       {tab === "payouts" && <PayoutsView />}
@@ -358,6 +361,19 @@ function ArticlesView() {
     queryFn: async () => adminAction<{ articles: any[] }>("shortlink_list_articles", { status: filter }),
   });
 
+  // Site base URL for building public article links
+  const { data: settingsResp } = useQuery({
+    queryKey: ["shortlink-settings"],
+    queryFn: async () => adminAction<{ settings: any }>("shortlink_get_settings"),
+  });
+  const siteUrl: string = (settingsResp?.settings?.site_url || "").replace(/\/$/, "");
+
+  const articleUrl = (slug: string) => siteUrl ? `${siteUrl}/p/${slug}` : `/p/${slug}`;
+  const copy = (s: string) => {
+    navigator.clipboard.writeText(s);
+    toast({ title: "Link copied" });
+  };
+
   const setStatus = async (id: string, status: string, reason?: string) => {
     try {
       await adminAction("shortlink_set_article_status", { id, status, reason });
@@ -402,8 +418,22 @@ function ArticlesView() {
                 by {a.shortlink_publishers?.email} • {new Date(a.created_at).toLocaleDateString()}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                Slug: <span className="font-mono">/p/{a.slug}</span> • Visits: {a.visit_count} • Earnings: {Number(a.earnings || 0).toFixed(4)}
+                Visits: {a.visit_count} • Earnings: {Number(a.earnings || 0).toFixed(4)}
               </p>
+              {a.status === "approved" && (
+                <div className="mt-1 flex items-center gap-1 bg-secondary/40 rounded-md p-1">
+                  <code className="text-[10px] truncate flex-1 font-mono" data-testid={`text-article-url-${a.id}`}>
+                    {articleUrl(a.slug)}
+                  </code>
+                  <Button size="icon" variant="ghost" className="h-5 w-5" onClick={() => copy(articleUrl(a.slug))} data-testid={`button-copy-${a.id}`}>
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                  <a href={articleUrl(a.slug)} target="_blank" rel="noreferrer"
+                    className="h-5 w-5 inline-flex items-center justify-center hover:bg-secondary rounded">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
             </div>
             <Badge className={`text-[9px] ${
               a.status === "approved" ? "bg-success/10 text-success" :
@@ -437,6 +467,219 @@ function ArticlesView() {
 }
 
 // ─── Payouts ──────────────────────────────────────────────────────────
+// ─── AI Models (multi-provider) ───────────────────────────────────────
+interface AiModelRow {
+  id?: string;
+  provider: string;
+  display_name: string;
+  model: string;
+  api_key?: string;
+  base_url?: string | null;
+  language?: string;
+  is_default?: boolean;
+  is_active?: boolean;
+  sort_order?: number;
+}
+
+const PROVIDER_PRESETS: Record<string, { models: string[]; baseUrl?: string; hint: string }> = {
+  openai:     { models: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"], hint: "OpenAI — supports text + images" },
+  gemini:     { models: ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"], hint: "Google AI Studio API key" },
+  deepseek:   { models: ["deepseek-chat", "deepseek-reasoner"], baseUrl: "https://api.deepseek.com/v1", hint: "DeepSeek (chat-completions compatible)" },
+  anthropic:  { models: ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", "claude-3-opus-latest"], hint: "Anthropic Claude" },
+  openrouter: { models: ["openai/gpt-4o-mini", "anthropic/claude-3.5-sonnet", "google/gemini-flash-1.5"], baseUrl: "https://openrouter.ai/api/v1", hint: "Aggregator — set model as 'org/model'" },
+  custom:     { models: [], hint: "Any OpenAI-compatible endpoint. Set base_url." },
+};
+
+function AiModelsView() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["shortlink-ai-models"],
+    queryFn: async () => adminAction<{ models: AiModelRow[] }>("shortlink_list_ai_models"),
+  });
+
+  const [editing, setEditing] = useState<AiModelRow | null>(null);
+
+  const blank = (): AiModelRow => ({
+    provider: "openai",
+    display_name: "",
+    model: "gpt-4o-mini",
+    api_key: "",
+    base_url: null,
+    language: "ar",
+    is_default: false,
+    is_active: true,
+    sort_order: 0,
+  });
+
+  const save = async () => {
+    if (!editing) return;
+    if (!editing.display_name.trim() || !editing.model.trim()) {
+      toast({ title: "Display name & model required", variant: "destructive" });
+      return;
+    }
+    if (!editing.id && !editing.api_key?.trim()) {
+      toast({ title: "API key required for new model", variant: "destructive" });
+      return;
+    }
+    try {
+      await adminAction("shortlink_save_ai_model", editing as unknown as Record<string, unknown>);
+      toast({ title: editing.id ? "Updated" : "Added" });
+      qc.invalidateQueries({ queryKey: ["shortlink-ai-models"] });
+      setEditing(null);
+    } catch (e: any) {
+      toast({ title: e.message, variant: "destructive" });
+    }
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm("Delete this AI model?")) return;
+    try {
+      await adminAction("shortlink_delete_ai_model", { id });
+      toast({ title: "Deleted" });
+      qc.invalidateQueries({ queryKey: ["shortlink-ai-models"] });
+    } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
+  };
+
+  const list = data?.models || [];
+
+  return (
+    <div className="space-y-3">
+      <div className="glass-card rounded-xl p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-xs font-bold text-primary">AI Providers</h4>
+            <p className="text-[10px] text-muted-foreground">
+              Manage multiple providers (OpenAI, Gemini, DeepSeek, Claude, OpenRouter, Custom). Publishers pick one when generating articles.
+            </p>
+          </div>
+          {!editing && (
+            <Button size="sm" className="h-7 text-[10px]" onClick={() => setEditing(blank())} data-testid="button-add-ai-model">
+              <Plus className="w-3 h-3 me-1" /> Add model
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {editing && (
+        <div className="glass-card rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold">{editing.id ? "Edit AI model" : "New AI model"}</p>
+            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(null)}>
+              <XCircle className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Provider">
+              <Select
+                value={editing.provider}
+                onValueChange={(v) => {
+                  const preset = PROVIDER_PRESETS[v];
+                  setEditing({
+                    ...editing,
+                    provider: v,
+                    model: preset?.models[0] || editing.model,
+                    base_url: preset?.baseUrl ?? editing.base_url ?? null,
+                  });
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.keys(PROVIDER_PRESETS).map((p) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Display name">
+              <Input value={editing.display_name}
+                onChange={(e) => setEditing({ ...editing, display_name: e.target.value })}
+                className="h-8 text-xs" placeholder="e.g. Gemini 1.5 Pro" data-testid="input-ai-display-name" />
+            </Field>
+            <Field label="Model id">
+              <Input value={editing.model}
+                onChange={(e) => setEditing({ ...editing, model: e.target.value })}
+                className="h-8 text-xs font-mono" placeholder="model-id" data-testid="input-ai-model-id" />
+            </Field>
+            <Field label="Language (ar/en/…)">
+              <Input value={editing.language || "ar"}
+                onChange={(e) => setEditing({ ...editing, language: e.target.value })}
+                className="h-8 text-xs" />
+            </Field>
+            <Field label={editing.id ? "API key (leave blank to keep)" : "API key"} full>
+              <Input type="password" value={editing.api_key || ""}
+                onChange={(e) => setEditing({ ...editing, api_key: e.target.value })}
+                className="h-8 text-xs" placeholder="sk-…" data-testid="input-ai-api-key" />
+            </Field>
+            <Field label="Base URL (optional — for custom/openrouter)" full>
+              <Input value={editing.base_url || ""}
+                onChange={(e) => setEditing({ ...editing, base_url: e.target.value || null })}
+                className="h-8 text-xs" placeholder="https://api.example.com/v1" />
+            </Field>
+            <Field label="Sort order">
+              <Input type="number" value={editing.sort_order ?? 0}
+                onChange={(e) => setEditing({ ...editing, sort_order: +e.target.value })}
+                className="h-8 text-xs" />
+            </Field>
+            <div className="flex items-end gap-3">
+              <label className="flex items-center gap-2 text-xs">
+                <Switch checked={!!editing.is_active}
+                  onCheckedChange={(v) => setEditing({ ...editing, is_active: v })} />
+                Active
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <Switch checked={!!editing.is_default}
+                  onCheckedChange={(v) => setEditing({ ...editing, is_default: v })} />
+                Default
+              </label>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-muted-foreground italic">
+            {PROVIDER_PRESETS[editing.provider]?.hint}
+          </p>
+
+          <Button className="w-full h-8 text-xs" onClick={save} data-testid="button-save-ai-model">
+            <Save className="w-3 h-3 me-1" /> Save
+          </Button>
+        </div>
+      )}
+
+      {isLoading && <Skeleton className="h-24 rounded-xl" />}
+      {!isLoading && list.length === 0 && !editing && (
+        <p className="text-xs text-muted-foreground text-center py-8">
+          No AI models yet. Add one to enable AI-generated articles.
+        </p>
+      )}
+
+      {list.map((m) => (
+        <div key={m.id} className="glass-card rounded-xl p-3 flex items-center gap-2" data-testid={`ai-model-${m.id}`}>
+          <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs font-semibold truncate">{m.display_name}</p>
+              {m.is_default && <Badge className="bg-primary/10 text-primary text-[9px] border-0"><Star className="w-2.5 h-2.5 me-0.5" />Default</Badge>}
+              {!m.is_active && <Badge variant="outline" className="text-[9px]">Off</Badge>}
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate">
+              <span className="font-mono">{m.provider}</span> · <span className="font-mono">{m.model}</span>
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing({ ...m, api_key: "" })}>
+            <Edit2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => remove(m.id!)}>
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PayoutsView() {
   const { toast } = useToast();
   const qc = useQueryClient();

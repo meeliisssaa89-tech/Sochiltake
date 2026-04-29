@@ -395,6 +395,78 @@ Deno.serve(async (req) => {
         });
       }
 
+      // ── AI models management (multiple providers) ──
+      case 'shortlink_list_ai_models': {
+        const { data } = await admin
+          .from('shortlink_ai_models')
+          .select('id, provider, display_name, model, base_url, language, is_default, is_active, sort_order, created_at')
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true });
+        return json({ models: data || [] });
+      }
+
+      case 'shortlink_save_ai_model': {
+        const p = (payload || {}) as Record<string, unknown>;
+        const id = p.id ? String(p.id) : null;
+        const fields: Record<string, unknown> = {
+          provider: String(p.provider || 'openai').toLowerCase().trim(),
+          display_name: String(p.display_name || '').trim(),
+          model: String(p.model || '').trim(),
+          base_url: p.base_url ? String(p.base_url).trim() : null,
+          language: String(p.language || 'ar').trim(),
+          is_default: !!p.is_default,
+          is_active: p.is_active === undefined ? true : !!p.is_active,
+          sort_order: Number(p.sort_order || 0),
+          updated_at: new Date().toISOString(),
+        };
+        if (!fields.display_name || !fields.model) {
+          return json({ error: 'display_name and model are required' }, 400);
+        }
+        // Only set api_key if provided (to allow editing without leaking)
+        if (p.api_key && String(p.api_key).trim()) {
+          fields.api_key = String(p.api_key).trim();
+        }
+
+        if (id) {
+          const { error } = await admin.from('shortlink_ai_models').update(fields).eq('id', id);
+          if (error) return json({ error: error.message }, 400);
+          return json({ ok: true, id });
+        }
+        if (!fields.api_key) return json({ error: 'api_key is required for new models' }, 400);
+        const { data, error } = await admin
+          .from('shortlink_ai_models').insert(fields).select('id').single();
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true, id: data?.id });
+      }
+
+      case 'shortlink_delete_ai_model': {
+        const id = String((payload as any)?.id || '');
+        if (!id) return json({ error: 'id required' }, 400);
+        const { error } = await admin.from('shortlink_ai_models').delete().eq('id', id);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
+      // ── Approved articles list (for the code-task picker) ──
+      case 'shortlink_list_published_articles': {
+        const limit = Math.min(200, Math.max(1, Number((payload as any)?.limit || 100)));
+        const { data, error } = await admin
+          .from('shortlink_pub_articles')
+          .select('id, slug, title, status, visit_count, earnings, created_at, cover_url, shortlink_publishers!inner(email, display_name)')
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        if (error) return json({ error: error.message }, 400);
+
+        const { data: settings } = await admin
+          .from('shortlink_settings').select('site_url').eq('id', 1).maybeSingle();
+        const siteUrl: string = (settings?.site_url || '').replace(/\/$/, '');
+        return json({
+          articles: data || [],
+          site_url: siteUrl,
+        });
+      }
+
       default:
         return json({ error: `Unknown action: ${action}` }, 400);
     }

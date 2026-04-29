@@ -27,6 +27,12 @@ export interface Publisher {
   linked_telegram_id?: string | null;
 }
 
+export interface ArticleSection {
+  title: string;
+  content: string;
+  image_url: string | null;
+}
+
 export interface PubArticle {
   id: string;
   slug: string;
@@ -38,10 +44,29 @@ export interface PubArticle {
   earnings: number;
   created_at: string;
   rejection_reason?: string | null;
+  sections?: ArticleSection[];
+  source?: string;
+}
+
+export interface AiModelLite {
+  id: string;
+  provider: string;
+  display_name: string;
+  is_default: boolean;
+}
+
+export interface ArticleInput {
+  title: string;
+  cover_url?: string | null;
+  sections: ArticleSection[];
 }
 
 export const pubApi = {
-  status: () => request<{ publishers_enabled: boolean; signup_enabled: boolean; site_title: string; brand_color: string }>("/api/publisher/status"),
+  status: () => request<{
+    publishers_enabled: boolean; signup_enabled: boolean;
+    site_title: string; brand_color: string;
+    min_sections: number; min_section_chars: number;
+  }>("/api/publisher/status"),
 
   signup: (email: string, password: string, display_name?: string) =>
     request<{ ok: true; token: string; publisher: Publisher }>("/api/publisher/signup", {
@@ -61,13 +86,13 @@ export const pubApi = {
 
   listArticles: () => request<{ articles: PubArticle[] }>("/api/publisher/articles"),
 
-  createArticle: (title: string, content: string, cover_url?: string) =>
+  createArticle: (input: ArticleInput) =>
     request<{ article: PubArticle }>("/api/publisher/articles", {
       method: "POST",
-      body: JSON.stringify({ title, content, cover_url }),
+      body: JSON.stringify(input),
     }),
 
-  updateArticle: (id: string, patch: { title?: string; content?: string; cover_url?: string | null }) =>
+  updateArticle: (id: string, patch: Partial<ArticleInput>) =>
     request<{ ok: true }>(`/api/publisher/articles?id=${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -78,6 +103,16 @@ export const pubApi = {
 
   viewArticle: (slug: string) =>
     request<{ article: PubArticle; settings: any }>(`/api/p/view?slug=${encodeURIComponent(slug)}`),
+
+  // AI-assisted authoring
+  listAiModels: () =>
+    request<{ models: AiModelLite[] }>("/api/publisher/ai_models"),
+
+  aiGenerate: (topic: string, model_id?: string, language?: string) =>
+    request<{ article: { title: string; cover_url: string | null; sections: ArticleSection[] } }>(
+      "/api/publisher/ai_generate",
+      { method: "POST", body: JSON.stringify({ topic, model_id, language }) },
+    ),
 };
 
 export function setPubToken(token: string) {
