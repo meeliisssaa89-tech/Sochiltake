@@ -1,9 +1,9 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web", "bash"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
-channel = "stable-24_05"
+channel = "stable-25_05"
 packages = ["unzipNLS"]
 
 [[ports]]
@@ -51,3 +51,9 @@ waitForPort = 5000
 [userenv.shared]
 SUPABASE_ACCESS_TOKEN = "sbp_68b1ffc7c94a6e85ab1a588bca9b6e1486b7e1ef"
 SUPABASE_PROJECT_REF = "abmwmsvbwaqjxugleegn"
+VITE_SUPABASE_URL = "https://abmwmsvbwaqjxugleegn.supabase.co"
+
+[agent]
+expertMode = true
+stack = "BEST_EFFORT_FALLBACK"
+integrations = ["javascript_database:1.0.0"]
