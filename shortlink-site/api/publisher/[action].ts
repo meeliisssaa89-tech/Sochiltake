@@ -9,6 +9,7 @@ import {
   ensurePublishersEnabled, ensureSignupEnabled, tokenTtlMs,
 } from "../_lib/pubAuth.js";
 import { generateArticleSectionsViaAI } from "../_lib/articles.js";
+import crypto from "crypto";
 
 // Multi-section validation rules (also reflected in the editor UI).
 const MIN_SECTIONS = 3;
@@ -63,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case "articles":    return handleArticles(req, res);
     case "ai_models":   return handleAiModels(req, res);
     case "ai_generate": return handleAiGenerate(req, res);
+    case "shortlinks":  return handleShortlinks(req, res);
     default:            return res.status(404).json({ error: `Unknown publisher action: ${action}` });
   }
 }
@@ -329,4 +331,114 @@ async function handleAiGenerate(req: VercelRequest, res: VercelResponse) {
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "AI generation failed" });
   }
+}
+
+// -- shortlinks (publisher URL shortener) ------------------------------------
+// GET  ?action=shortlinks           → list my shortlinks
+// POST ?action=shortlinks  {op:"create", title?, original_url}
+// POST ?action=shortlinks  {op:"delete", id}
+// POST ?action=shortlinks  {op:"toggle", id}
+
+function randomCode(len = 7): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const buf = crypto.randomBytes(len);
+  let out = "";
+  for (let i = 0; i < len; i++) out += chars[buf[i] % chars.length];
+  return out;
+}
+
+async function handleShortlinks(req: VercelRequest, res: VercelResponse) {
+  if (!(await ensurePublishersEnabled(res))) return;
+  const me = await requirePublisher(req, res);
+  if (!me) return;
+
+  // ── GET: list ──────────────────────────────────────────────────────────────
+  if (req.method === "GET") {
+    const { data } = await supabase
+      .from("publisher_shortlinks")
+      .select("id, title, original_url, short_code, visit_count, earnings, is_active, created_at")
+      .eq("publisher_id", me.id)
+      .order("created_at", { ascending: false });
+    const { data: settings } = await supabase
+      .from("shortlink_settings").select("site_url").eq("id", 1).maybeSingle();
+    const siteUrl = (settings?.site_url || "").replace(/\/$/, "");
+    return res.status(200).json({
+      shortlinks: (data || []).map((s: any) => ({
+        ...s,
+        short_url: `${siteUrl}/s/${s.short_code}`,
+      })),
+      site_url: siteUrl,
+    });
+  }
+
+  // ── POST ───────────────────────────────────────────────────────────────────
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  const body = req.body || {};
+  const op = String(body.op || "create").toLowerCase();
+
+  if (op === "create") {
+    const original_url = String(body.original_url || "").trim();
+    if (!original_url.startsWith("http://") && !original_url.startsWith("https://")) {
+      return res.status(400).json({ error: "original_url must start with http:// or https://" });
+    }
+    if (original_url.length > 2048) return res.status(400).json({ error: "URL too long" });
+    const title = String(body.title || "").trim().slice(0, 120) || null;
+
+    // Unique code, max 5 tries
+    let code = "";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = randomCode(7);
+      const { data } = await supabase
+        .from("publisher_shortlinks").select("id").eq("short_code", candidate).maybeSingle();
+      if (!data) { code = candidate; break; }
+    }
+    if (!code) return res.status(500).json({ error: "Could not generate unique code, try again." });
+
+    // Enforce per-publisher limit (max 200 links) — cheap guard
+    const { count } = await supabase
+      .from("publisher_shortlinks")
+      .select("id", { count: "exact", head: true })
+      .eq("publisher_id", me.id);
+    if ((count || 0) >= 200) {
+      return res.status(400).json({ error: "Shortlink limit reached (200 per account). Delete old ones first." });
+    }
+
+    const { data: created, error } = await supabase
+      .from("publisher_shortlinks")
+      .insert({ publisher_id: me.id, title, original_url, short_code: code })
+      .select("id, short_code")
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    const { data: settings } = await supabase
+      .from("shortlink_settings").select("site_url").eq("id", 1).maybeSingle();
+    const siteUrl = (settings?.site_url || "").replace(/\/$/, "");
+    return res.status(200).json({
+      ok: true,
+      id: created.id,
+      short_code: created.short_code,
+      short_url: `${siteUrl}/s/${created.short_code}`,
+    });
+  }
+
+  if (op === "delete") {
+    const id = String(body.id || "");
+    if (!id) return res.status(400).json({ error: "id required" });
+    await supabase
+      .from("publisher_shortlinks").delete().eq("id", id).eq("publisher_id", me.id);
+    return res.status(200).json({ ok: true });
+  }
+
+  if (op === "toggle") {
+    const id = String(body.id || "");
+    if (!id) return res.status(400).json({ error: "id required" });
+    const { data: row } = await supabase
+      .from("publisher_shortlinks").select("is_active").eq("id", id).eq("publisher_id", me.id).maybeSingle();
+    if (!row) return res.status(404).json({ error: "Not found" });
+    await supabase
+      .from("publisher_shortlinks").update({ is_active: !row.is_active }).eq("id", id);
+    return res.status(200).json({ ok: true, is_active: !row.is_active });
+  }
+
+  return res.status(400).json({ error: `Unknown op: ${op}` });
 }

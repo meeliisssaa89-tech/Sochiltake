@@ -7,7 +7,9 @@ import PubLoginPage from "./pages/PubLoginPage";
 import PubSignupPage from "./pages/PubSignupPage";
 import PubDashboardPage from "./pages/PubDashboardPage";
 import PubEditorPage from "./pages/PubEditorPage";
+import PubShortlinksPage from "./pages/PubShortlinksPage";
 import PublicArticlePage from "./pages/PublicArticlePage";
+import ShortlinkRedirectPage from "./pages/ShortlinkRedirectPage";
 
 export default function App() {
   return (
@@ -23,9 +25,13 @@ export default function App() {
       <Route path="/publisher/dashboard" element={<PubDashboardPage />} />
       <Route path="/publisher/article/new" element={<PubEditorPage />} />
       <Route path="/publisher/article/:id/edit" element={<PubEditorPage />} />
+      <Route path="/publisher/shortlinks" element={<PubShortlinksPage />} />
 
       {/* Public article viewer */}
       <Route path="/p/:slug" element={<PublicArticlePage />} />
+
+      {/* Publisher shortlink redirect (with ad display) */}
+      <Route path="/s/:code" element={<ShortlinkRedirectPage />} />
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

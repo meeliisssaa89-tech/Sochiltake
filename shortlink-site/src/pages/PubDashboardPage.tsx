@@ -92,10 +92,41 @@ export default function PubDashboardPage() {
         </div>
       </div>
 
+      {/* Quick actions: Articles + Shortlinks */}
+      <div className="grid grid-cols-2 gap-3">
+        <Link to="/publisher/article/new"
+          className="card text-center hover:border-purple-400 transition-colors cursor-pointer"
+          style={{ textDecoration: "none", color: "inherit" }}>
+          <p style={{ fontSize: 28 }}>✍️</p>
+          <p className="font-bold text-sm mt-1">مقالة جديدة</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">اكتب واكسب من الزيارات</p>
+        </Link>
+        <Link to="/publisher/shortlinks"
+          className="card text-center hover:border-purple-400 transition-colors cursor-pointer"
+          style={{ textDecoration: "none", color: "inherit" }}>
+          <p style={{ fontSize: 28 }}>🔗</p>
+          <p className="font-bold text-sm mt-1">اختصر رابطًا</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">شورت لنك مع إعلانات</p>
+        </Link>
+      </div>
+
+      {/* Coming Soon: API */}
+      <div className="card border-purple-200 bg-purple-50">
+        <div className="flex items-start gap-3">
+          <span style={{ fontSize: 22 }}>🚀</span>
+          <div>
+            <p className="font-bold text-sm text-purple-800">قريبًا: API مدفوع للمطوّرين</p>
+            <p className="text-[11px] text-purple-600 mt-1 leading-relaxed">
+              ستتمكّن من ربط منصّتنا مباشرةً ببوتاتك وتطبيقاتك على تيليجرام لإنشاء مهام الكود ومشاركة الروابط المختصرة تلقائيًا. يعمل الفريق على الإطلاق.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold">My Articles</h2>
-          <Link to="/publisher/article/new" className="btn-brand text-xs px-3 py-1.5" data-testid="button-new-article">+ New article</Link>
+          <h2 className="font-bold">مقالاتي</h2>
+          <Link to="/publisher/article/new" className="btn-brand text-xs px-3 py-1.5" data-testid="button-new-article">+ مقالة جديدة</Link>
         </div>
 
         {err && <p className="text-xs text-red-600 mb-2">{err}</p>}

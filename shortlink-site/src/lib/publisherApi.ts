@@ -48,6 +48,18 @@ export interface PubArticle {
   source?: string;
 }
 
+export interface PubShortlink {
+  id: string;
+  title: string | null;
+  original_url: string;
+  short_code: string;
+  short_url: string;
+  visit_count: number;
+  earnings: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface AiModelLite {
   id: string;
   provider: string;
@@ -113,6 +125,28 @@ export const pubApi = {
       "/api/publisher/ai_generate",
       { method: "POST", body: JSON.stringify({ topic, model_id, language }) },
     ),
+
+  // ── Shortlinks ──────────────────────────────────────────────────────
+  listShortlinks: () =>
+    request<{ shortlinks: PubShortlink[]; site_url: string }>("/api/publisher/shortlinks"),
+
+  createShortlink: (original_url: string, title?: string) =>
+    request<{ ok: true; id: string; short_code: string; short_url: string }>(
+      "/api/publisher/shortlinks",
+      { method: "POST", body: JSON.stringify({ op: "create", original_url, title }) },
+    ),
+
+  deleteShortlink: (id: string) =>
+    request<{ ok: true }>("/api/publisher/shortlinks", {
+      method: "POST",
+      body: JSON.stringify({ op: "delete", id }),
+    }),
+
+  toggleShortlink: (id: string) =>
+    request<{ ok: true; is_active: boolean }>("/api/publisher/shortlinks", {
+      method: "POST",
+      body: JSON.stringify({ op: "toggle", id }),
+    }),
 };
 
 export function setPubToken(token: string) {
