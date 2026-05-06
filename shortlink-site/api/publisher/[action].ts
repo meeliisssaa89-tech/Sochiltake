@@ -2,7 +2,7 @@
 // Handles every /api/publisher/* sub-action: signup, login, logout, me, articles, status, ai_generate.
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyCors } from "../_lib/cors.js";
-import { supabase, getSettings } from "../_lib/supabase.js";
+import { pubDb as supabase, getPubSettings as getSettings } from "../_lib/supabase.js";
 import {
   hashPublisherPassword, generateLinkCode, generateSlug, signToken,
   setPubCookie, clearPubCookie, getSecret, requirePublisher,
@@ -225,7 +225,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
     if (t.length < 4) return res.status(400).json({ error: "Title (4+) required" });
 
     const norm = normaliseSections(sections);
-    if (!norm.ok) return res.status(400).json({ error: norm.error });
+    if (!norm.ok) return res.status(400).json({ error: (norm as any).error });
 
     const settings = await getSettings();
     const requireApproval = settings.articles_require_approval !== false;
@@ -260,7 +260,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
 
     if (sections !== undefined) {
       const norm = normaliseSections(sections);
-      if (!norm.ok) return res.status(400).json({ error: norm.error });
+      if (!norm.ok) return res.status(400).json({ error: (norm as any).error });
       update.sections = norm.sections;
       update.content = norm.combined;
       if (!update.cover_url) update.cover_url = norm.sections[0].image_url;
