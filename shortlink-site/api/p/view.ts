@@ -1,27 +1,26 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "crypto";
 import { applyCors } from "../_lib/cors.js";
-import { supabase, getSettings } from "../_lib/supabase.js";
+import { pubDb, getPubSettings } from "../_lib/supabase.js";
 
 /**
  * GET /api/p/view?slug=…
  * Returns the public article body and (server-side) records a visit with country
- * inferred from `x-vercel-ip-country`. Crawlers / repeat IPs still count once
- * per slug per IP per day to keep numbers honest.
+ * inferred from `x-vercel-ip-country`. De-dup: one visit per IP per article per hour.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   const slug = String(req.query?.slug || "").trim();
   if (!slug) return res.status(400).json({ error: "slug required" });
 
-  const settings = await getSettings();
+  const settings = await getPubSettings();
   if (!settings.publishers_enabled) {
     return res.status(403).json({ error: "Publisher program is not active yet." });
   }
 
-  const { data: article } = await supabase
+  const { data: article } = await pubDb
     .from("shortlink_pub_articles")
-    .select("id, publisher_id, slug, title, content, cover_url, status, created_at")
+    .select("id, publisher_id, slug, title, content, cover_url, sections, status, created_at")
     .eq("slug", slug)
     .maybeSingle();
   if (!article) return res.status(404).json({ error: "Article not found" });
@@ -39,14 +38,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const ip =
     String(req.headers["x-forwarded-for"] || "")
       .split(",")[0]
-      .trim() || String(req.socket?.remoteAddress || "");
+      .trim() || String((req.socket as any)?.remoteAddress || "");
   const ipHash = crypto.createHash("sha256").update(`${ip}:${slug}`).digest("hex").slice(0, 32);
   const ua = String(req.headers["user-agent"] || "").slice(0, 200);
   const referrer = String(req.headers["referer"] || req.headers["referrer"] || "").slice(0, 200);
 
-  // De-dup: ignore if same ipHash visited the same article within 1h.
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { data: recent } = await supabase
+  const { data: recent } = await pubDb
     .from("shortlink_pub_visits")
     .select("id")
     .eq("article_id", article.id)
@@ -57,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!recent) {
     const revenue = Number(settings.revenue_per_visit || 0);
-    await supabase.from("shortlink_pub_visits").insert({
+    await pubDb.from("shortlink_pub_visits").insert({
       article_id: article.id,
       publisher_id: article.publisher_id,
       country,
@@ -67,14 +65,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       revenue,
     });
 
-    // Increment article counters
-    const { data: a } = await supabase
+    const { data: a } = await pubDb
       .from("shortlink_pub_articles")
       .select("visit_count, earnings")
       .eq("id", article.id)
       .maybeSingle();
     if (a) {
-      await supabase
+      await pubDb
         .from("shortlink_pub_articles")
         .update({
           visit_count: (a.visit_count || 0) + 1,
@@ -83,14 +80,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", article.id);
     }
 
-    // Increment publisher counters
-    const { data: pub } = await supabase
+    const { data: pub } = await pubDb
       .from("shortlink_publishers")
       .select("total_visits, pending_balance")
       .eq("id", article.publisher_id)
       .maybeSingle();
     if (pub) {
-      await supabase
+      await pubDb
         .from("shortlink_publishers")
         .update({
           total_visits: (pub.total_visits || 0) + 1,
@@ -107,6 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title: article.title,
       content: article.content,
       cover_url: article.cover_url,
+      sections: article.sections,
       created_at: article.created_at,
     },
     settings: {
