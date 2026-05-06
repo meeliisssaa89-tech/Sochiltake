@@ -5,10 +5,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "crypto";
 import { applyCors } from "../_lib/cors.js";
-import { supabase, getSettings } from "../_lib/supabase.js";
+import { pubDb, getPubSettings } from "../_lib/supabase.js";
 
 function generateCode(): string {
-  // 8-char base32-ish code, easy to read & type.
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = crypto.randomBytes(8);
   let out = "";
@@ -31,12 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "user_id, token and slug are required" });
   }
 
-  const settings = await getSettings();
+  const settings = await getPubSettings();
   if (!settings.publishers_enabled) {
     return res.status(403).json({ error: "Publisher program is not active." });
   }
 
-  const { data: article } = await supabase
+  const { data: article } = await pubDb
     .from("shortlink_pub_articles")
     .select("id, slug, status")
     .eq("slug", slug)
@@ -45,8 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(404).json({ error: "Article not available" });
   }
 
-  // Reuse an existing session for this (user, token) if present, otherwise create.
-  const { data: existing } = await supabase
+  const { data: existing } = await pubDb
     .from("shortlink_pub_sessions")
     .select("*")
     .eq("user_id", user_id)
@@ -58,7 +56,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (existing && existing.code) {
-    // Already issued — return the same code (idempotent).
     return res.status(200).json({
       session_id: existing.id,
       code: existing.code,
@@ -67,9 +64,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   let code = generateCode();
-  // Avoid collisions
   for (let i = 0; i < 5; i++) {
-    const { data } = await supabase
+    const { data } = await pubDb
       .from("shortlink_pub_sessions").select("id").eq("code", code).maybeSingle();
     if (!data) break;
     code = generateCode();
@@ -78,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const now = new Date().toISOString();
 
   if (existing) {
-    const { error } = await supabase
+    const { error } = await pubDb
       .from("shortlink_pub_sessions")
       .update({ code, completed_at: now, last_page_at: now, pages_done: 1 })
       .eq("id", existing.id);
@@ -86,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ session_id: existing.id, code });
   }
 
-  const { data: created, error } = await supabase
+  const { data: created, error } = await pubDb
     .from("shortlink_pub_sessions")
     .insert({
       user_id,
