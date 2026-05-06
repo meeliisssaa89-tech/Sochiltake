@@ -19,6 +19,10 @@ Deno.serve(async (req) => {
     const anon = Deno.env.get('SUPABASE_ANON_KEY')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+    // ── DB2: shortlink database (separate Supabase project for egress isolation) ──
+    const slUrl = Deno.env.get('SHORTLINK_DB_URL') || url;
+    const slKey = Deno.env.get('SHORTLINK_DB_SERVICE_KEY') || serviceKey;
+
     // ── Verify caller via the bearer access_token from Supabase Auth ──
     const authHeader = req.headers.get('Authorization') || '';
     const accessToken = authHeader.replace(/^Bearer\s+/i, '');
@@ -34,6 +38,8 @@ Deno.serve(async (req) => {
     const email = userData.user.email.toLowerCase();
 
     const admin = createClient(url, serviceKey);
+    // shortlink admin client points to DB2
+    const slAdmin = createClient(slUrl, slKey);
 
     // ── Allowlist check (or bootstrap the very first admin) ──
     const { data: anyAdmin } = await admin.from('admin_emails').select('email').limit(1);
@@ -134,10 +140,10 @@ Deno.serve(async (req) => {
       // app's controls and cannot accidentally affect the existing features.
 
       case 'shortlink_get_settings': {
-        const { data } = await admin.from('shortlink_settings').select('*').eq('id', 1).maybeSingle();
+        const { data } = await slAdmin.from('shortlink_settings').select('*').eq('id', 1).maybeSingle();
         if (!data) {
-          await admin.from('shortlink_settings').insert({ id: 1 });
-          const { data: fresh } = await admin.from('shortlink_settings').select('*').eq('id', 1).maybeSingle();
+          await slAdmin.from('shortlink_settings').insert({ id: 1 });
+          const { data: fresh } = await slAdmin.from('shortlink_settings').select('*').eq('id', 1).maybeSingle();
           return json({ settings: fresh || {} });
         }
         return json({ settings: data });
@@ -160,7 +166,7 @@ Deno.serve(async (req) => {
         }
         if (Object.keys(update).length === 0) return json({ ok: true });
         update.updated_at = new Date().toISOString();
-        const { error } = await admin.from('shortlink_settings').update(update).eq('id', 1);
+        const { error } = await slAdmin.from('shortlink_settings').update(update).eq('id', 1);
         if (error) return json({ error: error.message }, 400);
         return json({ ok: true });
       }
@@ -190,7 +196,7 @@ Deno.serve(async (req) => {
       case 'shortlink_delete_publisher': {
         const id = String(payload?.id || '');
         if (!id) return json({ error: 'id required' }, 400);
-        const { error } = await admin.from('shortlink_publishers').delete().eq('id', id);
+        const { error } = await slAdmin.from('shortlink_publishers').delete().eq('id', id);
         if (error) return json({ error: error.message }, 400);
         return json({ ok: true });
       }
@@ -241,7 +247,7 @@ Deno.serve(async (req) => {
       case 'shortlink_delete_article': {
         const id = String(payload?.id || '');
         if (!id) return json({ error: 'id required' }, 400);
-        const { error } = await admin.from('shortlink_pub_articles').delete().eq('id', id);
+        const { error } = await slAdmin.from('shortlink_pub_articles').delete().eq('id', id);
         if (error) return json({ error: error.message }, 400);
         return json({ ok: true });
       }
@@ -373,13 +379,13 @@ Deno.serve(async (req) => {
 
       case 'shortlink_stats': {
         const [pubsTotal, pubsLinked, articlesTotal, articlesPending, visits, payoutsPending, payoutsPaidSum] = await Promise.all([
-          admin.from('shortlink_publishers').select('id', { count: 'exact', head: true }),
-          admin.from('shortlink_publishers').select('id', { count: 'exact', head: true }).not('linked_telegram_id', 'is', null),
-          admin.from('shortlink_pub_articles').select('id', { count: 'exact', head: true }),
-          admin.from('shortlink_pub_articles').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          admin.from('shortlink_pub_visits').select('id', { count: 'exact', head: true }),
-          admin.from('shortlink_payouts').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-          admin.from('shortlink_payouts').select('amount').eq('status', 'approved'),
+          slAdmin.from('shortlink_publishers').select('id', { count: 'exact', head: true }),
+          slAdmin.from('shortlink_publishers').select('id', { count: 'exact', head: true }).not('linked_telegram_id', 'is', null),
+          slAdmin.from('shortlink_pub_articles').select('id', { count: 'exact', head: true }),
+          slAdmin.from('shortlink_pub_articles').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          slAdmin.from('shortlink_pub_visits').select('id', { count: 'exact', head: true }),
+          slAdmin.from('shortlink_payouts').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+          slAdmin.from('shortlink_payouts').select('amount').eq('status', 'approved'),
         ]);
         const paidSum = (payoutsPaidSum.data || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
         return json({
@@ -428,7 +434,7 @@ Deno.serve(async (req) => {
         }
 
         if (id) {
-          const { error } = await admin.from('shortlink_ai_models').update(fields).eq('id', id);
+          const { error } = await slAdmin.from('shortlink_ai_models').update(fields).eq('id', id);
           if (error) return json({ error: error.message }, 400);
           return json({ ok: true, id });
         }
@@ -442,7 +448,7 @@ Deno.serve(async (req) => {
       case 'shortlink_delete_ai_model': {
         const id = String((payload as any)?.id || '');
         if (!id) return json({ error: 'id required' }, 400);
-        const { error } = await admin.from('shortlink_ai_models').delete().eq('id', id);
+        const { error } = await slAdmin.from('shortlink_ai_models').delete().eq('id', id);
         if (error) return json({ error: error.message }, 400);
         return json({ ok: true });
       }
