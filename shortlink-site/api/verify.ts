@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyCors } from "./_lib/cors.js";
-import { supabase } from "./_lib/supabase.js";
+import { mainDb } from "./_lib/supabase.js";
 
 /**
  * POST /api/verify
@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Locate the session by code (and require user_id to match)
-  let q = supabase
+  let q = mainDb
     .from("task_code_sessions")
     .select("*")
     .eq("code", code)
@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Burn the code immediately so it can't be replayed
-  await supabase
+  await mainDb
     .from("task_code_sessions")
     .update({ used_at: new Date().toISOString() })
     .eq("id", session.id);

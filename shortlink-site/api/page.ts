@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyCors } from "./_lib/cors.js";
-import { supabase, getSettings } from "./_lib/supabase.js";
+import { mainDb, getSettings } from "./_lib/supabase.js";
 import { generateCode } from "./_lib/code.js";
 
 /**
@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "session_id and page are required" });
   }
 
-  const { data: session } = await supabase
+  const { data: session } = await mainDb
     .from("task_code_sessions")
     .select("*")
     .eq("id", session_id)
@@ -69,7 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Generate unique code (retry on rare collision)
       for (let i = 0; i < 5; i++) {
         const attempt = generateCode();
-        const { data, error } = await supabase
+        const { data, error } = await mainDb
           .from("task_code_sessions")
           .update({
             ...updates,
@@ -90,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!code) return res.status(500).json({ error: "Could not generate code, try again" });
     }
   } else {
-    await supabase.from("task_code_sessions").update(updates).eq("id", session_id);
+    await mainDb.from("task_code_sessions").update(updates).eq("id", session_id);
   }
 
   const article = articles[Math.min(page, totalPages - 1)];

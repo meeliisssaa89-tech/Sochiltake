@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyCors } from "./_lib/cors.js";
-import { supabase, getSettings } from "./_lib/supabase.js";
+import { mainDb, getSettings } from "./_lib/supabase.js";
 import { getArticlesForSession } from "./_lib/articles.js";
 
 /**
@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "user_id and token are required" });
   }
 
-  const { data: session, error } = await supabase
+  const { data: session, error } = await mainDb
     .from("task_code_sessions")
     .select("*")
     .eq("user_id", user_id)
@@ -49,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // First time? Generate articles + start the timer
   if (articles.length === 0) {
     articles = await getArticlesForSession(pageCount);
-    await supabase
+    await mainDb
       .from("task_code_sessions")
       .update({
         articles,
