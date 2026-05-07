@@ -1,7 +1,8 @@
 // Lightweight HMAC-signed JWT-like token for publisher accounts.
+// Uses the same `hmac_secret` from `shortlink_settings` that admin auth uses.
 import crypto from "crypto";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPubSettings, pubDb } from "./supabase.js";
+import { getSettings, supabase } from "./supabase.js";
 
 export interface PubTokenPayload {
   sub: string; // publisher_id
@@ -49,10 +50,12 @@ export function verifyToken(secret: string, token: string): PubTokenPayload | nu
 }
 
 export function hashPublisherPassword(plain: string): string {
+  // Same scheme as admin (sha256). Cheap & dependency-free; tokens are still HMAC-signed.
   return crypto.createHash("sha256").update(plain).digest("hex");
 }
 
 export function generateLinkCode(): string {
+  // 12-char upper-case, looks like AB7K-9MNP-Q2RZ once formatted by the UI.
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = crypto.randomBytes(12);
   let out = "";
@@ -61,6 +64,7 @@ export function generateLinkCode(): string {
 }
 
 export function generateSlug(): string {
+  // 10-char URL-safe slug.
   const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
   const bytes = crypto.randomBytes(10);
   let out = "";
@@ -89,11 +93,11 @@ export function clearPubCookie(res: VercelResponse) {
 }
 
 export async function getSecret(): Promise<string> {
-  const settings = await getPubSettings();
+  const settings = await getSettings();
   let secret = settings.hmac_secret as string | undefined;
   if (!secret) {
     secret = crypto.randomBytes(32).toString("hex");
-    await pubDb
+    await supabase
       .from("shortlink_settings")
       .update({ hmac_secret: secret, updated_at: new Date().toISOString() })
       .eq("id", 1);
@@ -124,7 +128,7 @@ export async function requirePublisher(
     return null;
   }
 
-  const { data: pub } = await pubDb
+  const { data: pub } = await supabase
     .from("shortlink_publishers")
     .select("*")
     .eq("id", payload.sub)
@@ -141,7 +145,7 @@ export async function requirePublisher(
 }
 
 export async function ensurePublishersEnabled(res: VercelResponse): Promise<boolean> {
-  const settings = await getPubSettings();
+  const settings = await getSettings();
   if (!settings.publishers_enabled) {
     res.status(403).json({ error: "Publisher program is not active yet." });
     return false;
@@ -150,7 +154,7 @@ export async function ensurePublishersEnabled(res: VercelResponse): Promise<bool
 }
 
 export async function ensureSignupEnabled(res: VercelResponse): Promise<boolean> {
-  const settings = await getPubSettings();
+  const settings = await getSettings();
   if (!settings.signup_enabled) {
     res.status(403).json({ error: "Sign-up is currently closed." });
     return false;
