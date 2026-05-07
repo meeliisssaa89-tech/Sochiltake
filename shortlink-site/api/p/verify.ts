@@ -3,7 +3,7 @@
 // by a publisher article. Body template (default): { user_id, code, token, slug }
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyCors } from "../_lib/cors.js";
-import { pubDb } from "../_lib/supabase.js";
+import { supabase } from "../_lib/supabase.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ success: false, message: "user_id and code required" });
   }
 
-  let q = pubDb
+  let q = supabase
     .from("shortlink_pub_sessions")
     .select("*")
     .eq("code", code)
@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ success: false, message: "Code already used" });
   }
 
-  await pubDb
+  await supabase
     .from("shortlink_pub_sessions")
     .update({ used_at: new Date().toISOString() })
     .eq("id", session.id);
