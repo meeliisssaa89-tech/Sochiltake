@@ -1,4 +1,4 @@
-import { supabase, getSettings, pubDb, getPubSettings } from "./supabase.js";
+import { supabase, getSettings } from "./supabase.js";
 
 export interface Article {
   id?: string;
@@ -63,7 +63,7 @@ export interface AiModelConfig {
 async function loadDefaultModel(modelId?: string | null): Promise<AiModelConfig | null> {
   // 1) explicit choice
   if (modelId) {
-    const { data } = await pubDb
+    const { data } = await supabase
       .from("shortlink_ai_models")
       .select("id, provider, model, api_key, base_url, language, is_active")
       .eq("id", modelId)
@@ -71,7 +71,7 @@ async function loadDefaultModel(modelId?: string | null): Promise<AiModelConfig 
     if (data && data.is_active !== false) return data as AiModelConfig;
   }
   // 2) default flagged
-  const { data: def } = await pubDb
+  const { data: def } = await supabase
     .from("shortlink_ai_models")
     .select("id, provider, model, api_key, base_url, language, is_active")
     .eq("is_default", true)
@@ -79,7 +79,7 @@ async function loadDefaultModel(modelId?: string | null): Promise<AiModelConfig 
     .maybeSingle();
   if (def) return def as AiModelConfig;
   // 3) any active
-  const { data: any1 } = await pubDb
+  const { data: any1 } = await supabase
     .from("shortlink_ai_models")
     .select("id, provider, model, api_key, base_url, language")
     .eq("is_active", true)
@@ -88,7 +88,7 @@ async function loadDefaultModel(modelId?: string | null): Promise<AiModelConfig 
     .maybeSingle();
   if (any1) return any1 as AiModelConfig;
   // 4) legacy single-provider settings fall-back
-  const settings = await getPubSettings();
+  const settings = await getSettings();
   if (settings.ai_api_key) {
     return {
       provider: (settings.ai_provider || "openai").toLowerCase(),
@@ -196,7 +196,7 @@ Return STRICT JSON ONLY (no markdown fences) with exactly this shape:
   // Image generation only supported via openai-style endpoint right now.
   if ((model.provider || "openai").toLowerCase() === "openai") {
     try {
-      const settings = await getPubSettings();
+      const settings = await getSettings();
       const imgModel = settings.ai_image_model || "dall-e-3";
       const ir = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
@@ -275,7 +275,7 @@ Provide exactly ${minSections} sections. Each section should cover a distinct an
   let coverUrl: string | null = null;
   if ((model.provider || "openai").toLowerCase() === "openai") {
     try {
-      const settings = await getPubSettings();
+      const settings = await getSettings();
       const imgModel = settings.ai_image_model || "dall-e-3";
       const ir = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
@@ -319,7 +319,7 @@ Provide exactly ${minSections} sections. Each section should cover a distinct an
  * finally to built-in fallbacks. Persists generated ones to shortlink_articles.
  */
 export async function getArticlesForSession(count: number): Promise<Article[]> {
-  const settings = await getPubSettings();
+  const settings = await getSettings();
   const topics: string[] =
     Array.isArray(settings.ai_topics) && settings.ai_topics.length > 0
       ? settings.ai_topics
