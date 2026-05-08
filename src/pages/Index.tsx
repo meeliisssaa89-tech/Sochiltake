@@ -23,12 +23,11 @@ const pages: Record<string, React.ComponentType> = {
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState("home");
-  const { dir } = useLanguage();
+  const { dir, language, setLanguage } = useLanguage();
   const { isLoading, user } = useUser();
   const { data: settings } = useAppSettings();
   const Page = pages[activeTab] || HomePage;
 
-  // Telegram WebApp: expand to full size & request fullscreen (Bot API 8.0+)
   useEffect(() => {
     const w = (window as any).Telegram?.WebApp;
     if (!w) return;
@@ -43,7 +42,6 @@ export default function Index() {
   const logoUrl = settings?.app_logo_url;
   const hasLogo = logoUrl && typeof logoUrl === "string" && logoUrl !== "null" && logoUrl.trim() !== "";
 
-  // Telegram-only access guard (after all hooks).
   const isInTelegram = typeof window !== "undefined" && !!(window as any).Telegram?.WebApp?.initData;
   const botUsername = (settings?.bot_username as string) || "";
   const isAdminRoute = typeof window !== "undefined" && window.location.pathname.startsWith(ADMIN_PATH);
@@ -89,10 +87,12 @@ export default function Index() {
     <div className="min-h-screen bg-background safe-top" dir={dir}>
       <AdsSdkInjector />
       <div className="max-w-lg mx-auto">
-        {hasLogo && (
-          <div className="flex items-center justify-center pt-3 pb-1">
-            <div className="relative w-14 h-14" data-testid="logo-frame">
-              {/* Color-reflective glow behind the frame (uses the logo itself, blurred) */}
+
+        {/* ── Top bar: logo (center) + language toggle (end) ── */}
+        <div className="relative flex items-center justify-center pt-3 pb-1 px-4 min-h-[52px]">
+          {/* Logo — centered */}
+          {hasLogo && (
+            <div className="relative w-11 h-11" data-testid="logo-frame">
               <img
                 src={logoUrl as string}
                 alt=""
@@ -105,13 +105,8 @@ export default function Index() {
                 aria-hidden="true"
                 className="absolute inset-0 w-full h-full object-contain rounded-full scale-110 blur-md opacity-60 pointer-events-none select-none"
               />
-              {/* Glassy circular ring — thicker border */}
-              <div
-                className="absolute inset-0 rounded-full border-[3px] border-white/40 bg-white/8 backdrop-blur-md shadow-[inset_0_2px_0_rgba(255,255,255,0.45),0_6px_28px_rgba(255,255,255,0.12),inset_0_0_0_1px_rgba(255,255,255,0.15)] overflow-hidden"
-              >
-                {/* Subtle highlight sweep to make it look like glass */}
+              <div className="absolute inset-0 rounded-full border-[2.5px] border-white/40 bg-white/8 backdrop-blur-md shadow-[inset_0_2px_0_rgba(255,255,255,0.45),0_6px_28px_rgba(255,255,255,0.12),inset_0_0_0_1px_rgba(255,255,255,0.15)] overflow-hidden">
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/25 via-transparent to-transparent pointer-events-none" />
-                {/* The actual crisp logo */}
                 <img
                   src={logoUrl as string}
                   alt="App Logo"
@@ -120,9 +115,32 @@ export default function Index() {
                 />
               </div>
             </div>
-          </div>
-        )}
-        <main className="px-4 pt-4 pb-20">
+          )}
+
+          {/* Language toggle pill — always at the end (right in LTR, left in RTL) */}
+          <button
+            onClick={() => setLanguage(language === "en" ? "ar" : "en")}
+            data-testid="button-lang-toggle"
+            className="absolute end-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2.5 py-1 rounded-full border border-white/15 bg-white/8 backdrop-blur-md text-[11px] font-semibold text-foreground/80 hover:bg-white/15 hover:text-foreground transition-all select-none"
+            aria-label="Toggle language"
+          >
+            <motion.span
+              key={language}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.15 }}
+              className="text-primary"
+            >
+              {language === "en" ? "EN" : "AR"}
+            </motion.span>
+            <span className="text-muted-foreground/60">|</span>
+            <span className="text-muted-foreground/70">
+              {language === "en" ? "AR" : "EN"}
+            </span>
+          </button>
+        </div>
+
+        <main className="px-4 pt-3 pb-20">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
