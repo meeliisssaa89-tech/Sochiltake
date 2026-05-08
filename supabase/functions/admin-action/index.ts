@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
       }
 
       case 'shortlink_list_publishers': {
-        const { data, error } = await admin
+        const { data, error } = await slAdmin
           .from('shortlink_publishers')
           .select('id, email, display_name, link_code, linked_telegram_id, pending_balance, lifetime_earnings, total_visits, is_blocked, created_at, linked_at')
           .order('created_at', { ascending: false })
@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
         const id = String(payload?.id || '');
         const blocked = !!payload?.blocked;
         if (!id) return json({ error: 'id required' }, 400);
-        const { error } = await admin
+        const { error } = await slAdmin
           .from('shortlink_publishers')
           .update({ is_blocked: blocked })
           .eq('id', id);
@@ -204,7 +204,7 @@ Deno.serve(async (req) => {
       case 'shortlink_unlink_publisher': {
         const id = String(payload?.id || '');
         if (!id) return json({ error: 'id required' }, 400);
-        const { error } = await admin
+        const { error } = await slAdmin
           .from('shortlink_publishers')
           .update({ linked_telegram_id: null, linked_at: null })
           .eq('id', id);
@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
 
       case 'shortlink_list_articles': {
         const status = String(payload?.status || '');
-        let q = admin
+        let q = slAdmin
           .from('shortlink_pub_articles')
           .select('*, shortlink_publishers!inner(email, display_name, linked_telegram_id)')
           .order('created_at', { ascending: false })
@@ -232,7 +232,7 @@ Deno.serve(async (req) => {
         if (!id || !['pending', 'approved', 'rejected'].includes(status)) {
           return json({ error: 'id and valid status required' }, 400);
         }
-        const { error } = await admin
+        const { error } = await slAdmin
           .from('shortlink_pub_articles')
           .update({
             status,
@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
 
       case 'shortlink_list_payouts': {
         const status = String(payload?.status || '');
-        let q = admin
+        let q = slAdmin
           .from('shortlink_payouts')
           .select('*, shortlink_publishers!inner(email, display_name), currencies(symbol, name, icon_url)')
           .order('requested_at', { ascending: false })
@@ -269,8 +269,8 @@ Deno.serve(async (req) => {
         const id = String(payload?.id || '');
         if (!id) return json({ error: 'id required' }, 400);
 
-        // Load the payout
-        const { data: pay } = await admin
+        // Load the payout from shortlink DB
+        const { data: pay } = await slAdmin
           .from('shortlink_payouts')
           .select('*')
           .eq('id', id)
@@ -278,8 +278,8 @@ Deno.serve(async (req) => {
         if (!pay) return json({ error: 'Payout not found' }, 404);
         if (pay.status !== 'pending') return json({ error: `Already ${pay.status}` }, 400);
 
-        // Load settings to find the payout currency (fallback to the payout's currency_id).
-        const { data: sl } = await admin
+        // Load settings from shortlink DB to find the payout currency
+        const { data: sl } = await slAdmin
           .from('shortlink_settings')
           .select('payout_currency_id')
           .eq('id', 1)
@@ -289,7 +289,7 @@ Deno.serve(async (req) => {
           return json({ error: 'Payout currency not configured' }, 400);
         }
 
-        // Credit the user's main app balance.
+        // Credit the user's main app balance (main DB)
         const { data: bal } = await admin
           .from('balances')
           .select('id, amount')
@@ -311,22 +311,21 @@ Deno.serve(async (req) => {
           if (e2) return json({ error: e2.message }, 400);
         }
 
-        // Bump publisher's lifetime_earnings.
-        await admin.rpc; // no-op placeholder
-        const { data: pub2 } = await admin
+        // Bump publisher's lifetime_earnings in shortlink DB
+        const { data: pub2 } = await slAdmin
           .from('shortlink_publishers')
           .select('lifetime_earnings')
           .eq('id', pay.publisher_id)
           .maybeSingle();
         if (pub2) {
-          await admin
+          await slAdmin
             .from('shortlink_publishers')
             .update({ lifetime_earnings: Number(pub2.lifetime_earnings || 0) + addAmount })
             .eq('id', pay.publisher_id);
         }
 
-        // Mark payout as approved.
-        const { error: e3 } = await admin
+        // Mark payout as approved in shortlink DB
+        const { error: e3 } = await slAdmin
           .from('shortlink_payouts')
           .update({
             status: 'approved',
@@ -344,7 +343,7 @@ Deno.serve(async (req) => {
         const id = String(payload?.id || '');
         if (!id) return json({ error: 'id required' }, 400);
 
-        const { data: pay } = await admin
+        const { data: pay } = await slAdmin
           .from('shortlink_payouts')
           .select('*')
           .eq('id', id)
@@ -352,20 +351,20 @@ Deno.serve(async (req) => {
         if (!pay) return json({ error: 'Payout not found' }, 404);
         if (pay.status !== 'pending') return json({ error: `Already ${pay.status}` }, 400);
 
-        // Refund the publisher's pending_balance.
-        const { data: pub3 } = await admin
+        // Refund the publisher's pending_balance in shortlink DB
+        const { data: pub3 } = await slAdmin
           .from('shortlink_publishers')
           .select('pending_balance')
           .eq('id', pay.publisher_id)
           .maybeSingle();
         if (pub3) {
-          await admin
+          await slAdmin
             .from('shortlink_publishers')
             .update({ pending_balance: Number(pub3.pending_balance || 0) + Number(pay.amount) })
             .eq('id', pay.publisher_id);
         }
 
-        const { error } = await admin
+        const { error } = await slAdmin
           .from('shortlink_payouts')
           .update({
             status: 'rejected',
@@ -403,7 +402,7 @@ Deno.serve(async (req) => {
 
       // ── AI models management (multiple providers) ──
       case 'shortlink_list_ai_models': {
-        const { data } = await admin
+        const { data } = await slAdmin
           .from('shortlink_ai_models')
           .select('id, provider, display_name, model, base_url, language, is_default, is_active, sort_order, created_at')
           .order('sort_order', { ascending: true })
@@ -439,7 +438,7 @@ Deno.serve(async (req) => {
           return json({ ok: true, id });
         }
         if (!fields.api_key) return json({ error: 'api_key is required for new models' }, 400);
-        const { data, error } = await admin
+        const { data, error } = await slAdmin
           .from('shortlink_ai_models').insert(fields).select('id').single();
         if (error) return json({ error: error.message }, 400);
         return json({ ok: true, id: data?.id });
@@ -456,7 +455,7 @@ Deno.serve(async (req) => {
       // ── Approved articles list (for the code-task picker) ──
       case 'shortlink_list_published_articles': {
         const limit = Math.min(200, Math.max(1, Number((payload as any)?.limit || 100)));
-        const { data, error } = await admin
+        const { data, error } = await slAdmin
           .from('shortlink_pub_articles')
           .select('id, slug, title, status, visit_count, earnings, created_at, cover_url, shortlink_publishers!inner(email, display_name)')
           .eq('status', 'approved')
@@ -464,7 +463,7 @@ Deno.serve(async (req) => {
           .limit(limit);
         if (error) return json({ error: error.message }, 400);
 
-        const { data: settings } = await admin
+        const { data: settings } = await slAdmin
           .from('shortlink_settings').select('site_url').eq('id', 1).maybeSingle();
         const siteUrl: string = (settings?.site_url || '').replace(/\/$/, '');
         return json({
