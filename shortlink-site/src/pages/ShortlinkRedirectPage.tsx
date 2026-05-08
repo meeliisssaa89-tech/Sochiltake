@@ -33,8 +33,8 @@ function AdHtml({ html }: { html: string }) {
 
 export default function ShortlinkRedirectPage() {
   const { code } = useParams<{ code: string }>();
-  const [info, setInfo] = useState<LinkInfo | null>(null);
-  const [error, setError] = useState("");
+  const [info, setInfo]           = useState<LinkInfo | null>(null);
+  const [error, setError]         = useState("");
   const [countdown, setCountdown] = useState(10);
   const [redirected, setRedirected] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -52,7 +52,7 @@ export default function ShortlinkRedirectPage() {
       .catch(() => setError("Failed to load link info."));
   }, [code]);
 
-  // Inject <head> ads once
+  // Inject head ads once
   useEffect(() => {
     if (!info?.settings?.ad_head_html) return;
     const div = document.createElement("div");
@@ -83,79 +83,102 @@ export default function ShortlinkRedirectPage() {
     return () => clearInterval(timerRef.current!);
   }, [info, redirected]);
 
-  const brand = info?.settings?.brand_color || "#7c3aed";
-  const title = info?.settings?.site_title || "Short Link";
+  const brand    = info?.settings?.brand_color || "#8b5cf6";
+  const siteName = info?.settings?.site_title  || "AdPulse";
+  const total    = info ? Math.max(3, Math.min(60, info.settings.redirect_delay ?? 10)) : 10;
+  const ringR    = 28;
+  const ringC    = 2 * Math.PI * ringR; // ~176
+  const ringOff  = ringC * (countdown / total);
 
   if (error) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0f0f13", color: "#fff", fontFamily: "system-ui,sans-serif", gap: 12 }}>
-        <p style={{ fontSize: 48 }}>🔗</p>
-        <p style={{ color: "#f87171", fontSize: 18, fontWeight: 600 }}>Link not found</p>
-        <p style={{ color: "#9ca3af" }}>{error}</p>
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center">
+        <div className="glass max-w-sm w-full p-8 fade-in">
+          <p className="text-5xl mb-4">🔗</p>
+          <p className="font-bold text-red-400 mb-2">Link not found</p>
+          <p className="text-sm" style={{ color: "var(--text-2)" }}>{error}</p>
+        </div>
       </div>
     );
   }
 
   if (!info) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0f0f13" }}>
-        <div style={{ width: 36, height: 36, border: `3px solid ${brand}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: brand, borderTopColor: "transparent" }} />
+          <p className="text-sm" style={{ color: "var(--text-3)" }}>Loading…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f0f13", color: "#fff", fontFamily: "system-ui,sans-serif", display: "flex", flexDirection: "column" }}>
+    <div className="min-h-screen flex flex-col">
       {/* Top ad */}
-      <div style={{ width: "100%" }}>
-        <AdHtml html={info.settings.ad_top_html} />
-      </div>
+      <AdHtml html={info.settings.ad_top_html} />
 
-      {/* Main content */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 16px", gap: 20 }}>
-        {/* Site name */}
-        <p style={{ fontSize: 13, color: "#6b7280", letterSpacing: 2, textTransform: "uppercase" }}>{title}</p>
-
-        {/* Link icon */}
-        <div style={{ width: 72, height: 72, borderRadius: "50%", background: `${brand}22`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>
-          🔗
+      {/* Main */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 gap-6 text-center">
+        {/* Site brand */}
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold text-white" style={{ background: brand }}>⚡</div>
+          <span className="text-sm font-bold" style={{ color: "var(--text-2)" }}>{siteName}</span>
         </div>
 
-        {/* Title / destination */}
-        {info.title && (
-          <p style={{ fontSize: 18, fontWeight: 700, textAlign: "center", maxWidth: 420 }}>{info.title}</p>
-        )}
-        <p style={{ fontSize: 13, color: "#6b7280", textAlign: "center", wordBreak: "break-all", maxWidth: 360 }}>
-          {info.original_url.length > 60 ? info.original_url.slice(0, 60) + "…" : info.original_url}
-        </p>
+        {/* Link card */}
+        <div className="glass-strong w-full max-w-md p-7 space-y-5">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mx-auto" style={{ background: `${brand}22`, border: `1px solid ${brand}44` }}>🔗</div>
 
-        {/* Middle ad */}
-        <AdHtml html={info.settings.ad_middle_html} />
+          {info.title && (
+            <h1 className="text-xl font-bold leading-tight">{info.title}</h1>
+          )}
 
-        {/* Countdown */}
-        {!redirected && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 72, height: 72, borderRadius: "50%", border: `4px solid ${brand}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 800, color: brand }}>
-              {countdown}
+          <p className="text-xs break-all px-2" style={{ color: "var(--text-3)" }}>
+            {info.original_url.length > 65 ? info.original_url.slice(0, 65) + "…" : info.original_url}
+          </p>
+
+          {/* Middle ad */}
+          <AdHtml html={info.settings.ad_middle_html} />
+
+          {/* Countdown ring */}
+          {!redirected ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative">
+                <svg width="72" height="72" viewBox="0 0 72 72">
+                  <circle cx="36" cy="36" r={ringR} fill="none" stroke="var(--border)" strokeWidth="5" />
+                  <circle cx="36" cy="36" r={ringR} fill="none" stroke={brand} strokeWidth="5"
+                    strokeDasharray={ringC} strokeDashoffset={ringC - ringOff}
+                    strokeLinecap="round"
+                    style={{ transform: "rotate(-90deg)", transformOrigin: "center", transition: "stroke-dashoffset 1s linear" }}
+                  />
+                </svg>
+                <span className="absolute inset-0 flex items-center justify-center text-xl font-black" style={{ color: brand }}>{countdown}</span>
+              </div>
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>Redirecting in {countdown}s</p>
             </div>
-            <p style={{ fontSize: 13, color: "#9ca3af" }}>ستُحوَّل خلال {countdown} ثانية</p>
-          </div>
-        )}
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: brand, borderTopColor: "transparent" }} />
+              <p className="text-sm" style={{ color: "var(--text-2)" }}>Redirecting…</p>
+            </div>
+          )}
 
-        {/* Manual redirect */}
-        <a
-          href={info.original_url}
-          style={{ background: brand, color: "#fff", padding: "12px 32px", borderRadius: 10, fontWeight: 700, fontSize: 15, textDecoration: "none", textAlign: "center" }}
-        >
-          انتقل الآن →
-        </a>
+          {/* Manual redirect */}
+          <a href={info.original_url}
+            className="btn-brand w-full py-3 text-center block"
+            style={{ textDecoration: "none" }}>
+            Go now →
+          </a>
+
+          <p className="text-xs" style={{ color: "var(--text-3)" }}>
+            You'll be automatically redirected. This shortlink is powered by {siteName}.
+          </p>
+        </div>
       </div>
 
       {/* Bottom ad */}
-      <div style={{ width: "100%" }}>
-        <AdHtml html={info.settings.ad_bottom_html} />
-      </div>
+      <AdHtml html={info.settings.ad_bottom_html} />
     </div>
   );
 }

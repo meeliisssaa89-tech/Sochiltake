@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: article } = await supabase
     .from("shortlink_pub_articles")
-    .select("id, publisher_id, slug, title, content, cover_url, status, created_at")
+    .select("id, publisher_id, slug, title, content, cover_url, sections, linked_shortlink_code, status, created_at")
     .eq("slug", slug)
     .maybeSingle();
   if (!article) return res.status(404).json({ error: "Article not found" });
@@ -107,6 +107,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title: article.title,
       content: article.content,
       cover_url: article.cover_url,
+      sections: article.sections || [],
+      linked_shortlink_code: article.linked_shortlink_code || null,
       created_at: article.created_at,
     },
     settings: {
@@ -116,6 +118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ad_top_html: settings.ad_top_html || "",
       ad_middle_html: settings.ad_middle_html || "",
       ad_bottom_html: settings.ad_bottom_html || "",
+      wait_seconds: Number(settings.article_wait_seconds || 8),
+      redirect_delay: Number(settings.redirect_delay || 10),
     },
   });
 }

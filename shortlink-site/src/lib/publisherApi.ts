@@ -46,6 +46,7 @@ export interface PubArticle {
   rejection_reason?: string | null;
   sections?: ArticleSection[];
   source?: string;
+  linked_shortlink_code?: string | null;
 }
 
 export interface PubShortlink {
@@ -71,6 +72,7 @@ export interface ArticleInput {
   title: string;
   cover_url?: string | null;
   sections: ArticleSection[];
+  linked_shortlink_code?: string | null;
 }
 
 export const pubApi = {
@@ -116,7 +118,6 @@ export const pubApi = {
   viewArticle: (slug: string) =>
     request<{ article: PubArticle; settings: any }>(`/api/p/view?slug=${encodeURIComponent(slug)}`),
 
-  // AI-assisted authoring
   listAiModels: () =>
     request<{ models: AiModelLite[] }>("/api/publisher/ai_models"),
 
@@ -126,7 +127,6 @@ export const pubApi = {
       { method: "POST", body: JSON.stringify({ topic, model_id, language }) },
     ),
 
-  // ── Shortlinks ──────────────────────────────────────────────────────
   listShortlinks: () =>
     request<{ shortlinks: PubShortlink[]; site_url: string }>("/api/publisher/shortlinks"),
 
@@ -149,12 +149,6 @@ export const pubApi = {
     }),
 };
 
-export function setPubToken(token: string) {
-  localStorage.setItem("sl_pub_token", token);
-}
-export function clearPubToken() {
-  localStorage.removeItem("sl_pub_token");
-}
-export function hasPubToken(): boolean {
-  return !!localStorage.getItem("sl_pub_token");
-}
+export function setPubToken(token: string)  { localStorage.setItem("sl_pub_token", token); }
+export function clearPubToken()             { localStorage.removeItem("sl_pub_token"); }
+export function hasPubToken(): boolean      { return !!localStorage.getItem("sl_pub_token"); }

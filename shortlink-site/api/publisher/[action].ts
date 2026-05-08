@@ -185,7 +185,7 @@ async function handleMe(req: VercelRequest, res: VercelResponse) {
 
   const { data: articles } = await supabase
     .from("shortlink_pub_articles")
-    .select("id, slug, title, status, visit_count, earnings, created_at, rejection_reason, cover_url, sections")
+    .select("id, slug, title, cover_url, sections, linked_shortlink_code, status, visit_count, earnings, created_at, rejection_reason")
     .eq("publisher_id", me.id)
     .order("created_at", { ascending: false });
 
@@ -220,7 +220,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { title, cover_url, sections } = req.body || {};
+    const { title, cover_url, sections, linked_shortlink_code } = req.body || {};
     const t = String(title || "").trim();
     if (t.length < 4) return res.status(400).json({ error: "Title (4+) required" });
 
@@ -244,6 +244,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
         content: norm.combined,
         cover_url: (cover_url ? String(cover_url) : norm.sections[0].image_url).slice(0, 500),
         sections: norm.sections,
+        linked_shortlink_code: linked_shortlink_code ? String(linked_shortlink_code).slice(0,50) : null,
         status: requireApproval ? "pending" : "approved",
       })
       .select().single();
@@ -253,10 +254,11 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "PATCH") {
     if (!id) return res.status(400).json({ error: "id required" });
-    const { title, cover_url, sections } = req.body || {};
+    const { title, cover_url, sections, linked_shortlink_code } = req.body || {};
     const update: any = { updated_at: new Date().toISOString() };
     if (title) update.title = String(title).slice(0, 200);
     if (cover_url !== undefined) update.cover_url = cover_url ? String(cover_url).slice(0, 500) : null;
+    if (linked_shortlink_code !== undefined) update.linked_shortlink_code = linked_shortlink_code ? String(linked_shortlink_code).slice(0,50) : null;
 
     if (sections !== undefined) {
       const norm = normaliseSections(sections);
