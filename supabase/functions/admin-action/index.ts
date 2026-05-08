@@ -256,13 +256,25 @@ Deno.serve(async (req) => {
         const status = String(payload?.status || '');
         let q = slAdmin
           .from('shortlink_payouts')
-          .select('*, shortlink_publishers!inner(email, display_name), currencies(symbol, name, icon_url)')
+          .select('*, shortlink_publishers!inner(email, display_name)')
           .order('requested_at', { ascending: false })
           .limit(500);
         if (status) q = q.eq('status', status);
         const { data, error } = await q;
         if (error) return json({ error: error.message }, 400);
-        return json({ payouts: data || [] });
+        // Enrich with currency info from main DB
+        const payouts = data || [];
+        const currencyIds = [...new Set(payouts.map((p: any) => p.currency_id).filter(Boolean))];
+        let currencyMap: Record<string, any> = {};
+        if (currencyIds.length > 0) {
+          const { data: currencies } = await admin
+            .from('currencies')
+            .select('id, symbol, name, icon_url')
+            .in('id', currencyIds);
+          for (const c of currencies || []) currencyMap[c.id] = c;
+        }
+        const enriched = payouts.map((p: any) => ({ ...p, currencies: currencyMap[p.currency_id] || null }));
+        return json({ payouts: enriched });
       }
 
       case 'shortlink_approve_payout': {
