@@ -27,13 +27,17 @@ Deno.serve(async (req) => {
   try {
     const url = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const admin = createClient(url, serviceKey);
+
+    // Shortlink DB (separate project — all shortlink_* tables live here)
+    const slUrl = Deno.env.get('SHORTLINK_DB_URL') || url;
+    const slKey = Deno.env.get('SHORTLINK_DB_SERVICE_KEY') || serviceKey;
+    const slAdmin = createClient(slUrl, slKey);
 
     const { action, payload } = await req.json();
     const p = payload || {};
 
     // Always load settings — we need the feature flags.
-    const { data: settings } = await admin
+    const { data: settings } = await slAdmin
       .from('shortlink_settings')
       .select('*')
       .eq('id', 1)
@@ -67,7 +71,7 @@ Deno.serve(async (req) => {
         const code = String(p.code || '').trim();
         if (!telegramId || !code) return json({ error: 'telegram_id and code required' }, 400);
 
-        const { data: pub } = await admin
+        const { data: pub } = await slAdmin
           .from('shortlink_publishers')
           .select('*')
           .eq('link_code', code)
@@ -79,7 +83,7 @@ Deno.serve(async (req) => {
         }
 
         // Check this telegram_id isn't already linked to another publisher
-        const { data: existing } = await admin
+        const { data: existing } = await slAdmin
           .from('shortlink_publishers')
           .select('id, email')
           .eq('linked_telegram_id', telegramId)
@@ -89,7 +93,7 @@ Deno.serve(async (req) => {
           return json({ error: `You're already linked to ${existing.email}. Unlink first.` }, 400);
         }
 
-        await admin
+        await slAdmin
           .from('shortlink_publishers')
           .update({ linked_telegram_id: telegramId, linked_at: new Date().toISOString() })
           .eq('id', pub.id);
@@ -100,7 +104,7 @@ Deno.serve(async (req) => {
       case 'unlink': {
         const telegramId = String(p.telegram_id || '').trim();
         if (!telegramId) return json({ error: 'telegram_id required' }, 400);
-        await admin
+        await slAdmin
           .from('shortlink_publishers')
           .update({ linked_telegram_id: null, linked_at: null })
           .eq('linked_telegram_id', telegramId);
@@ -111,14 +115,14 @@ Deno.serve(async (req) => {
         const telegramId = String(p.telegram_id || '').trim();
         if (!telegramId) return json({ error: 'telegram_id required' }, 400);
 
-        const { data: pub } = await admin
+        const { data: pub } = await slAdmin
           .from('shortlink_publishers')
           .select('id, email, display_name, link_code, pending_balance, lifetime_earnings, total_visits, is_blocked, created_at')
           .eq('linked_telegram_id', telegramId)
           .maybeSingle();
         if (!pub) return json({ linked: false });
 
-        const { data: articles } = await admin
+        const { data: articles } = await slAdmin
           .from('shortlink_pub_articles')
           .select('id, slug, title, status, visit_count, earnings, created_at, rejection_reason')
           .eq('publisher_id', pub.id)
@@ -126,7 +130,7 @@ Deno.serve(async (req) => {
           .limit(100);
 
         // Country breakdown
-        const { data: visits } = await admin
+        const { data: visits } = await slAdmin
           .from('shortlink_pub_visits')
           .select('country')
           .eq('publisher_id', pub.id)
@@ -142,7 +146,7 @@ Deno.serve(async (req) => {
           .sort((a, b) => b.count - a.count)
           .slice(0, 20);
 
-        const { data: payouts } = await admin
+        const { data: payouts } = await slAdmin
           .from('shortlink_payouts')
           .select('id, amount, status, requested_at, processed_at')
           .eq('publisher_id', pub.id)
@@ -174,7 +178,7 @@ Deno.serve(async (req) => {
           return json({ error: `Minimum payout is ${minPayout}` }, 400);
         }
 
-        const { data: pub } = await admin
+        const { data: pub } = await slAdmin
           .from('shortlink_publishers')
           .select('id, pending_balance, is_blocked')
           .eq('linked_telegram_id', telegramId)
@@ -187,13 +191,13 @@ Deno.serve(async (req) => {
 
         // Reserve the amount immediately by deducting from pending_balance.
         const newBal = Number(pub.pending_balance) - amount;
-        const { error: updErr } = await admin
+        const { error: updErr } = await slAdmin
           .from('shortlink_publishers')
           .update({ pending_balance: newBal })
           .eq('id', pub.id);
         if (updErr) return json({ error: updErr.message }, 400);
 
-        const { error: payErr } = await admin.from('shortlink_payouts').insert({
+        const { error: payErr } = await slAdmin.from('shortlink_payouts').insert({
           publisher_id: pub.id,
           telegram_id: telegramId,
           amount,
@@ -202,7 +206,7 @@ Deno.serve(async (req) => {
         });
         if (payErr) {
           // Rollback the deduction if insert failed.
-          await admin
+          await slAdmin
             .from('shortlink_publishers')
             .update({ pending_balance: Number(pub.pending_balance) })
             .eq('id', pub.id);
