@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/contexts/UserContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { hapticImpact, hapticNotification } from "@/lib/telegram";
-import { Eye, ShieldAlert, Info, ChevronLeft, Clock, Users, Trophy, X } from "lucide-react";
-
-const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
+import { Eye, ShieldAlert, Info, ChevronLeft, Clock, Users, X } from "lucide-react";
 
 /* ── countdown hook ─────────────────────────────────────────────────── */
 function useCountdown(target: string | null) {
@@ -44,17 +42,17 @@ function getDominantColor(url: string, cb: (rgb: string) => void) {
   img.src = url;
 }
 
-/* ── player entry fetcher ───────────────────────────────────────────── */
+/* ── player entry fetcher (with user profile) ───────────────────────── */
 function usePlayerEntries(tournamentId: string) {
   return useQuery({
     queryKey: ["player_entries", tournamentId],
     queryFn: async () => {
       const { data } = await supabase
         .from("tournament_player_entries")
-        .select("user_id, player_game_id, joined_at")
+        .select("user_id, player_game_id, joined_at, users:user_id(first_name, username, photo_url)")
         .eq("tournament_id", tournamentId)
         .order("joined_at");
-      return data || [];
+      return (data || []) as any[];
     },
     refetchInterval: 8000,
   });
@@ -78,41 +76,56 @@ function useMyPlayerEntry(tournamentId: string, userId: string | undefined) {
 }
 
 /* ── SeatCard ───────────────────────────────────────────────────────── */
+const SEAT_SIZE = 72; // px — consistent across all grid sizes
+
 function SeatCard({ entry, index, rgb }: { entry: any | null; index: number; rgb: string }) {
   if (entry) {
+    const user = entry.users;
+    const photoUrl = user?.photo_url;
+    const fallback = (user?.first_name || entry.player_game_id || "?").slice(0, 2).toUpperCase();
+    const displayName = (entry.player_game_id || user?.first_name || user?.username || "").slice(0, 8);
+
     return (
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: index * 0.02 }}
-        className="relative aspect-square flex flex-col items-center justify-center rounded-xl gap-1"
+        transition={{ delay: Math.min(index * 0.015, 0.4) }}
+        className="relative flex flex-col items-center justify-center rounded-xl gap-1 p-1"
         style={{
+          width: SEAT_SIZE,
+          height: SEAT_SIZE,
           background: `rgba(${rgb},0.12)`,
           border: `1px solid rgba(${rgb},0.35)`,
           boxShadow: `0 2px 12px rgba(${rgb},0.15)`,
+          flexShrink: 0,
         }}
       >
-        <Avatar className="w-8 h-8 border border-white/20">
-          <AvatarFallback className="text-[10px] bg-primary/20 text-primary font-bold">
-            {entry.player_game_id?.slice(0, 2).toUpperCase() || "?"}
+        <Avatar className="w-10 h-10 border border-white/20">
+          {photoUrl && <AvatarImage src={photoUrl} />}
+          <AvatarFallback className="text-[11px] bg-primary/20 text-primary font-bold">
+            {fallback}
           </AvatarFallback>
         </Avatar>
-        <span className="text-[8px] text-white/50 truncate w-full text-center px-0.5">
-          {entry.player_game_id?.slice(0, 8)}
+        <span className="text-[9px] text-white/50 truncate w-full text-center px-0.5">
+          {displayName}
         </span>
         <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-green-400" />
       </motion.div>
     );
   }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ delay: index * 0.01 }}
-      className="aspect-square flex items-center justify-center rounded-xl"
+      transition={{ delay: Math.min(index * 0.008, 0.3) }}
+      className="flex items-center justify-center rounded-xl"
       style={{
+        width: SEAT_SIZE,
+        height: SEAT_SIZE,
         background: "rgba(255,255,255,0.04)",
         border: "1px solid rgba(255,255,255,0.08)",
+        flexShrink: 0,
       }}
     >
       <span className="text-white/20 text-2xl font-thin">+</span>
@@ -142,7 +155,7 @@ function PlayerIdForm({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end justify-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center"
       style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
       onClick={onClose}
     >
@@ -165,7 +178,7 @@ function PlayerIdForm({
           <div className="w-10 h-1 rounded-full bg-white/20" />
         </div>
 
-        <div className="px-5 pb-8 space-y-4">
+        <div className="px-5 pb-6 space-y-4" style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom) + 6rem)" }}>
           {/* Monitoring warning */}
           <div className="flex items-start gap-3 p-3 rounded-2xl"
             style={{ background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)" }}>
@@ -247,7 +260,6 @@ function CountdownSection({ tournament, rgb }: { tournament: any; rgb: string })
   const { d, h, m, s, total } = useCountdown(tournament.starts_at);
   const isLive = tournament.status === "active";
   const ended = tournament.status === "ended";
-
   const imgSrc = tournament.image_url || tournament.tournament_games?.image_url;
 
   return (
@@ -294,7 +306,6 @@ function CountdownSection({ tournament, rgb }: { tournament: any; rgb: string })
                       fontSize: "clamp(1.8rem, 7vw, 2.8rem)",
                       color: "rgb(234,179,8)",
                       textShadow: "0 0 20px rgba(234,179,8,0.7), 0 0 40px rgba(234,179,8,0.4)",
-                      fontFamily: "'Inter', system-ui, sans-serif",
                     }}
                   >
                     {String(v).padStart(2, "0")}
@@ -342,13 +353,12 @@ export function TournamentSeatsView({
   }, [imgSrc]);
 
   const maxSeats = Number(tournament.max_participants) || 0;
-  const filledMap: Record<string, any> = {};
-  entries.forEach((e: any) => { filledMap[e.user_id] = e; });
-
   const seats = Array.from({ length: maxSeats }, (_, i) => entries[i] || null);
 
-  const bigGrid = maxSeats > 40;
-  const cols = bigGrid ? 5 : Math.min(maxSeats, 6);
+  /* always 4 columns, same seat size, horizontal scroll for big grids */
+  const COLS = 4;
+  const GAP = 8; // px
+  const GRID_W = COLS * SEAT_SIZE + (COLS - 1) * GAP; // 72*4 + 3*8 = 312px
 
   const handleJoin = async (playerId: string) => {
     if (!user?.telegram_id) return;
@@ -364,7 +374,7 @@ export function TournamentSeatsView({
 
       const { error: entErr } = await supabase.from("tournament_entries")
         .insert({ tournament_id: tournament.id, user_id: user.telegram_id });
-      if (entErr) throw new Error("Already joined or error");
+      if (entErr && !entErr.message.includes("duplicate")) throw new Error("Error joining tournament");
 
       await supabase.from("tournament_player_entries").upsert({
         tournament_id: tournament.id,
@@ -397,18 +407,25 @@ export function TournamentSeatsView({
   const ended = tournament.status === "ended";
   const alreadyIn = isAlreadyJoined || !!myEntry;
 
+  /* group seats into rows of COLS for the grid */
+  const rows: (any | null)[][] = [];
+  for (let i = 0; i < seats.length; i += COLS) {
+    rows.push(seats.slice(i, i + COLS));
+  }
+
   return (
     <>
       <motion.div
         initial={{ opacity: 0, x: 30 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: -30 }}
-        className="space-y-4 pb-6"
+        className="space-y-4"
+        style={{ paddingBottom: "6rem" }}
       >
         {/* Back header */}
         <div className="flex items-center gap-3">
           <button onClick={onBack}
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)" }}>
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>
@@ -417,7 +434,7 @@ export function TournamentSeatsView({
             <p className="text-xs text-white/40">{entries.length}/{maxSeats} players joined</p>
           </div>
           {alreadyIn && (
-            <div className="px-2.5 py-1 rounded-full text-xs font-bold"
+            <div className="px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0"
               style={{ background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "rgb(74,222,128)" }}>
               ✓ Joined
             </div>
@@ -433,31 +450,26 @@ export function TournamentSeatsView({
             <p className="text-xs text-white/30">{maxSeats - entries.length} remaining</p>
           </div>
 
-          {bigGrid ? (
-            <div className="overflow-x-auto pb-2 -mx-4 px-4">
-              <div className="inline-flex gap-2" style={{ minWidth: "max-content" }}>
-                {Array.from({ length: Math.ceil(maxSeats / 30) }, (_, page) => (
-                  <div key={page} className="rounded-2xl p-3 flex-shrink-0"
-                    style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", width: 200 }}>
-                    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(5, 1fr)` }}>
-                      {seats.slice(page * 30, page * 30 + 30).map((entry, i) => (
-                        <SeatCard key={page * 30 + i} entry={entry} index={page * 30 + i} rgb={rgb} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* Scrollable seats container — always 4 cols, horizontal scroll when seats overflow */}
+          <div
+            className="rounded-2xl p-3 overflow-x-auto"
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}
+          >
+            <div style={{ minWidth: GRID_W, display: "flex", flexDirection: "column", gap: GAP }}>
+              {rows.map((row, ri) => (
+                <div key={ri} style={{ display: "flex", gap: GAP }}>
+                  {row.map((entry, ci) => (
+                    <SeatCard
+                      key={ri * COLS + ci}
+                      entry={entry}
+                      index={ri * COLS + ci}
+                      rgb={rgb}
+                    />
+                  ))}
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="rounded-2xl p-3"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-              <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-                {seats.map((entry, i) => (
-                  <SeatCard key={i} entry={entry} index={i} rgb={rgb} />
-                ))}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Join button */}
