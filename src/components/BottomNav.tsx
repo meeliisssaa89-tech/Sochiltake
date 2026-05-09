@@ -34,12 +34,13 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
           {/* ── Tournament bar (separate pill) ──────────────────────── */}
           <div className="pointer-events-auto flex-shrink-0">
             <div
-              className="bottom-nav-glass rounded-2xl flex items-center justify-center"
-              style={{ width: 56, height: 60 }}
+              className="bottom-nav-glass rounded-2xl"
+              style={{ width: 60 }}
             >
+              <div className="px-1 py-2">
               <button
                 onClick={() => { hapticSelection(); onTabChange("tournament"); }}
-                className="relative flex flex-col items-center gap-0.5 py-1.5 px-2 w-full h-full justify-center transition-all"
+                className="relative flex flex-col items-center gap-0.5 py-1.5 px-1 w-full justify-center transition-all"
               >
                 {isTournament && (
                   <motion.div
@@ -50,25 +51,26 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                   />
                 )}
                 <div className="relative z-10 flex flex-col items-center gap-0.5">
-                  {/* Custom sword/tournament icon */}
                   <Swords
                     size={22}
+                    strokeWidth={1.8}
                     className="transition-colors"
                     style={{ color: isTournament ? "rgb(234,179,8)" : "hsl(var(--muted-foreground))" }}
                   />
                   <span
-                    className="text-[9px] font-bold transition-colors"
+                    className="text-[10px] font-medium transition-colors"
                     style={{ color: isTournament ? "rgb(234,179,8)" : "hsl(var(--muted-foreground))" }}
                   >
                     Arena
                   </span>
                 </div>
               </button>
+              </div>
             </div>
           </div>
 
           {/* ── Main nav bar ─────────────────────────────────────────── */}
-          <nav className="pointer-events-auto flex-1 bottom-nav-glass rounded-2xl">
+          <nav className="pointer-events-auto flex-1 bottom-nav-glass rounded-2xl overflow-visible">
             <div className="flex items-center justify-around px-2 py-2">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
