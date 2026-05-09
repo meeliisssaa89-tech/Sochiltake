@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,7 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { hapticImpact, hapticNotification } from "@/lib/telegram";
-import { Trophy, Plus, Users, Clock, Star, Swords, ChevronRight, Lock } from "lucide-react";
+import { Trophy, Plus, Users, Clock, Swords, ChevronRight } from "lucide-react";
 
 const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
 
@@ -182,9 +182,9 @@ function TournamentCard({ t: trn, isJoined, onJoin }: { t: any; isJoined: boolea
   const sRgb = statusColors[trn.status] || "139,92,246";
   const imgSrc = trn.image_url || trn.tournament_games?.image_url;
 
-  useState(() => {
+  useEffect(() => {
     if (imgSrc) getDominantColor(imgSrc, setRgb);
-  });
+  }, [imgSrc]);
 
   return (
     <motion.div
