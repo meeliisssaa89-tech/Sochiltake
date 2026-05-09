@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ function useAdminTournaments() {
 export function AdminTournamentView() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [activeSection, setActiveSection] = useState<"games" | "types" | "tournaments">("games");
+  const [activeSection, setActiveSection] = useState<"games" | "types" | "tournaments" | "wallet">("games");
 
   const { data: games = [], isLoading: gamesLoading } = useAdminGames();
   const { data: types  = [] } = useAdminTypes();
@@ -75,6 +75,7 @@ export function AdminTournamentView() {
     entry_fee_usdt: "0", prize_pool: "0", max_participants: "100",
     image_url: "", status: "upcoming",
     starts_at: "", ends_at: "",
+    terms: "", player_id_label: "Player ID",
   });
   const [tLoading, setTLoading] = useState(false);
 
@@ -93,11 +94,13 @@ export function AdminTournamentView() {
       status: newT.status,
       starts_at: newT.starts_at || null,
       ends_at: newT.ends_at || null,
+      terms: newT.terms.trim() || null,
+      player_id_label: newT.player_id_label.trim() || "Player ID",
     });
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else {
       toast({ title: "Tournament created" });
-      setNewT({ name: "", game_id: "", type_id: "", mode: "classic", entry_fee_usdt: "0", prize_pool: "0", max_participants: "100", image_url: "", status: "upcoming", starts_at: "", ends_at: "" });
+      setNewT({ name: "", game_id: "", type_id: "", mode: "classic", entry_fee_usdt: "0", prize_pool: "0", max_participants: "100", image_url: "", status: "upcoming", starts_at: "", ends_at: "", terms: "", player_id_label: "Player ID" });
       qc.invalidateQueries({ queryKey: ["admin_tournaments_all"] });
       qc.invalidateQueries({ queryKey: ["tournaments"] });
     }
@@ -119,10 +122,11 @@ export function AdminTournamentView() {
     toast({ title: `Status → ${status}` });
   };
 
-  const sections: { key: "games" | "types" | "tournaments"; label: string; icon: any }[] = [
+  const sections: { key: "games" | "types" | "tournaments" | "wallet"; label: string; icon: any }[] = [
     { key: "games",       label: "Games",       icon: Gamepad2 },
-    { key: "types",       label: "Types",        icon: Users },
-    { key: "tournaments", label: "Tournaments",  icon: Trophy },
+    { key: "types",       label: "Types",       icon: Users },
+    { key: "tournaments", label: "Tournaments", icon: Trophy },
+    { key: "wallet",      label: "Wallet",      icon: Swords },
   ];
 
   const statusBadge = (s: string) => {
@@ -245,6 +249,12 @@ export function AdminTournamentView() {
               <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">Start date (optional)</label><Input className="h-9 text-sm" type="datetime-local" value={newT.starts_at} onChange={(e) => setNewT({ ...newT, starts_at: e.target.value })} /></div>
               <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">End date (optional)</label><Input className="h-9 text-sm" type="datetime-local" value={newT.ends_at} onChange={(e) => setNewT({ ...newT, ends_at: e.target.value })} /></div>
             </div>
+            <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">Player ID Label (shown in join form)</label>
+              <Input className="h-9 text-sm" placeholder="e.g. PUBG ID, IGN, UID…" value={newT.player_id_label} onChange={(e) => setNewT({ ...newT, player_id_label: e.target.value })} />
+            </div>
+            <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">Terms & Conditions (shown to player before joining)</label>
+              <textarea rows={3} className="w-full rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm resize-none focus:outline-none focus:border-primary/50" placeholder="e.g. By joining you agree to fair play rules…" value={newT.terms} onChange={(e) => setNewT({ ...newT, terms: e.target.value })} />
+            </div>
             <Button size="sm" className="w-full gap-2" onClick={addTournament} disabled={tLoading}>
               {tLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Create Tournament
             </Button>
@@ -278,6 +288,120 @@ export function AdminTournamentView() {
           </div>
         </div>
       )}
+
+      {/* ── WALLET SETTINGS ──────────────────────────────────────────── */}
+      {activeSection === "wallet" && <TournamentWalletAdmin />}
+    </div>
+  );
+}
+
+/* ─── TournamentWalletAdmin ──────────────────────────────────────────── */
+function TournamentWalletAdmin() {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const { data: raw, refetch } = useQuery({
+    queryKey: ["admin_tournament_wallet"],
+    queryFn: async () => {
+      const { data } = await supabase.from("app_settings").select("*").maybeSingle();
+      return data;
+    },
+  });
+
+  const [form, setForm] = useState({
+    deposit_enabled: false, withdraw_enabled: false,
+    deposit_address: "", deposit_network: "TRC20",
+    min_deposit: "5", min_withdraw: "5", withdraw_note: "",
+  });
+  const [formLoaded, setFormLoaded] = useState(false);
+
+  useEffect(() => {
+    if (raw && !formLoaded) {
+      setForm({
+        deposit_enabled: (raw as any).tournament_deposit_enabled ?? false,
+        withdraw_enabled: (raw as any).tournament_withdraw_enabled ?? false,
+        deposit_address: (raw as any).tournament_deposit_address ?? "",
+        deposit_network: (raw as any).tournament_deposit_network ?? "TRC20",
+        min_deposit: String((raw as any).tournament_min_deposit ?? 5),
+        min_withdraw: String((raw as any).tournament_min_withdraw ?? 5),
+        withdraw_note: (raw as any).tournament_withdraw_note ?? "",
+      });
+      setFormLoaded(true);
+    }
+  }, [raw, formLoaded]);
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from("app_settings").update({
+      tournament_deposit_enabled: form.deposit_enabled,
+      tournament_withdraw_enabled: form.withdraw_enabled,
+      tournament_deposit_address: form.deposit_address.trim() || null,
+      tournament_deposit_network: form.deposit_network.trim() || "TRC20",
+      tournament_min_deposit: Number(form.min_deposit) || 5,
+      tournament_min_withdraw: Number(form.min_withdraw) || 5,
+      tournament_withdraw_note: form.withdraw_note.trim() || null,
+    }).eq("id", raw?.id);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else { toast({ title: "Wallet settings saved" }); refetch(); }
+    setSaving(false);
+  };
+
+  const inp = "w-full rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm focus:outline-none focus:border-primary/50";
+
+  return (
+    <div className="space-y-3">
+      <div className="glass-card rounded-xl p-4 space-y-4">
+        <h3 className="text-sm font-bold flex items-center gap-2">
+          <Swords className="w-4 h-4 text-primary" /> Tournament USDT Wallet
+        </h3>
+
+        <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border">
+          <div>
+            <p className="text-sm font-medium">Enable Deposits</p>
+            <p className="text-xs text-muted-foreground">Allow players to deposit USDT</p>
+          </div>
+          <Switch checked={form.deposit_enabled} onCheckedChange={(v) => setForm({ ...form, deposit_enabled: v })} />
+        </div>
+
+        <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border">
+          <div>
+            <p className="text-sm font-medium">Enable Withdrawals</p>
+            <p className="text-xs text-muted-foreground">Allow players to withdraw USDT</p>
+          </div>
+          <Switch checked={form.withdraw_enabled} onCheckedChange={(v) => setForm({ ...form, withdraw_enabled: v })} />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deposit Wallet Address</label>
+          <input className={inp} placeholder="TRC20 / BEP20 address…" value={form.deposit_address} onChange={(e) => setForm({ ...form, deposit_address: e.target.value })} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted-foreground">Network</label>
+            <select className={inp} value={form.deposit_network} onChange={(e) => setForm({ ...form, deposit_network: e.target.value })}>
+              <option>TRC20</option><option>BEP20</option><option>ERC20</option><option>Polygon</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted-foreground">Min Deposit ($)</label>
+            <input className={inp} type="number" min="0" value={form.min_deposit} onChange={(e) => setForm({ ...form, min_deposit: e.target.value })} />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-muted-foreground">Min Withdrawal ($)</label>
+          <input className={inp} type="number" min="0" value={form.min_withdraw} onChange={(e) => setForm({ ...form, min_withdraw: e.target.value })} />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-muted-foreground">Withdrawal Note (shown to users)</label>
+          <textarea rows={2} className={`${inp} resize-none`} placeholder="e.g. Withdrawals processed within 24h…" value={form.withdraw_note} onChange={(e) => setForm({ ...form, withdraw_note: e.target.value })} />
+        </div>
+
+        <Button size="sm" className="w-full gap-2" onClick={save} disabled={saving}>
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Save Wallet Settings
+        </Button>
+      </div>
     </div>
   );
 }
