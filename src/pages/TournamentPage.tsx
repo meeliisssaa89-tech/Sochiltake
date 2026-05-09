@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/contexts/UserContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { hapticImpact, hapticNotification } from "@/lib/telegram";
+import { hapticImpact } from "@/lib/telegram";
 import { Trophy, Plus, Users, Clock, Swords, ChevronRight } from "lucide-react";
 import { TournamentSeatsView } from "@/components/TournamentSeatsView";
 import { TournamentWalletSheet } from "@/components/TournamentWalletSheet";
@@ -41,7 +41,9 @@ function useTournaments(gameId: string | null, typeId: string | null) {
   return useQuery({
     queryKey: ["tournaments", gameId, typeId],
     queryFn: async () => {
-      let q = supabase.from("tournaments").select("*, tournament_games(name, image_url), tournament_types(name)").order("created_at", { ascending: false });
+      let q = supabase.from("tournaments")
+        .select("*, tournament_games(name, image_url), tournament_types(name)")
+        .order("created_at", { ascending: false });
       if (gameId) q = q.eq("game_id", gameId);
       if (typeId) q = q.eq("type_id", typeId);
       const { data } = await q;
@@ -135,7 +137,7 @@ function GameCard({ game, onSelect }: { game: any; onSelect: () => void }) {
             style={{
               fontSize: "clamp(2.2rem, 8vw, 3.5rem)", color: "#fff",
               textShadow: `0 0 30px rgba(${rgb},0.9), 0 2px 8px rgba(0,0,0,0.8)`,
-              fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: "-0.02em",
+              letterSpacing: "-0.02em",
             }}>
             {game.name.toUpperCase()}
           </h2>
@@ -337,12 +339,12 @@ export function TournamentPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      {/* ─── 3-section header ─────────────────────────────────────────── */}
+      {/* ─── Header row: user pill | balance pill ─────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between gap-2"
       >
-        {/* Pill 1: User photo + name */}
+        {/* User photo + name */}
         <div className="flex items-center gap-2 px-3 py-2 rounded-2xl"
           style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(16px)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)" }}>
           <Avatar className="h-7 w-7 border border-white/20">
@@ -351,18 +353,12 @@ export function TournamentPage() {
               {(user?.first_name || "U").charAt(0)}
             </AvatarFallback>
           </Avatar>
-          <span className="text-sm font-bold text-white max-w-[70px] truncate">
+          <span className="text-sm font-bold text-white max-w-[80px] truncate">
             {user?.first_name || user?.username || "Player"}
           </span>
         </div>
 
-        {/* Pill 2: Arena icon (center) */}
-        <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center"
-          style={{ background: "rgba(234,179,8,0.12)", border: "1.5px solid rgba(234,179,8,0.3)", boxShadow: "0 0 20px rgba(234,179,8,0.15), inset 0 1px 0 rgba(255,255,255,0.1)" }}>
-          <Swords className="w-6 h-6" style={{ color: "rgb(234,179,8)" }} />
-        </div>
-
-        {/* Pill 3: Tournament balance + wallet */}
+        {/* Tournament balance + wallet button */}
         <div className="flex items-center gap-2 px-3 py-2 rounded-2xl"
           style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(16px)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)" }}>
           <img src={usdtIconUrl} alt="USDT" className="w-5 h-5 rounded-full object-contain" />
