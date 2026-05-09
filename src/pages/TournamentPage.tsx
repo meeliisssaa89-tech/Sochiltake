@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/contexts/UserContext";
-import { useAppSettings } from "@/hooks/useSupabaseData";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { hapticImpact, hapticNotification } from "@/lib/telegram";
 import { Trophy, Plus, Users, Clock, Swords, ChevronRight } from "lucide-react";
+import { TournamentSeatsView } from "@/components/TournamentSeatsView";
+import { TournamentWalletSheet } from "@/components/TournamentWalletSheet";
 
 const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
 
@@ -74,7 +75,7 @@ function useMyEntries(userId: string | undefined) {
   });
 }
 
-/* ─── dominant color from image (extracted via canvas) ─────────────── */
+/* ─── dominant color from image ────────────────────────────────────── */
 function getDominantColor(imageUrl: string, cb: (hex: string) => void) {
   const img = new Image();
   img.crossOrigin = "anonymous";
@@ -91,10 +92,9 @@ function getDominantColor(imageUrl: string, cb: (hex: string) => void) {
   img.src = imageUrl;
 }
 
-/* ─── GameCard: the CRUSH-style large card ────────────────────────────── */
+/* ─── GameCard ────────────────────────────────────────────────────────── */
 function GameCard({ game, onSelect }: { game: any; onSelect: () => void }) {
   const [rgb, setRgb] = useState("80,40,140");
-  const [loaded, setLoaded] = useState(false);
 
   return (
     <motion.div
@@ -111,22 +111,16 @@ function GameCard({ game, onSelect }: { game: any; onSelect: () => void }) {
         backdropFilter: "blur(20px)",
       }}
     >
-      {/* Image */}
       <div className="relative w-full" style={{ aspectRatio: "16/7" }}>
         {game.image_url ? (
           <>
-            {/* Reflection glow behind */}
             <div className="absolute inset-0 scale-110 blur-2xl opacity-40"
               style={{ background: `radial-gradient(ellipse, rgba(${rgb},0.8) 0%, transparent 70%)` }} />
             <img
-              src={game.image_url}
-              alt={game.name}
+              src={game.image_url} alt={game.name}
               className="absolute inset-0 w-full h-full object-cover"
               style={{ borderRadius: "20px 20px 0 0" }}
-              onLoad={(e) => {
-                setLoaded(true);
-                getDominantColor(game.image_url, setRgb);
-              }}
+              onLoad={() => getDominantColor(game.image_url, setRgb)}
             />
           </>
         ) : (
@@ -135,30 +129,23 @@ function GameCard({ game, onSelect }: { game: any; onSelect: () => void }) {
             <Swords className="w-20 h-20 opacity-30" />
           </div>
         )}
-        {/* Game name overlay — CRUSH style */}
         <div className="absolute bottom-0 left-0 right-0 p-4 pt-12"
           style={{ background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%)" }}>
-          <h2
-            className="font-black leading-none tracking-tight select-none"
+          <h2 className="font-black leading-none tracking-tight select-none"
             style={{
-              fontSize: "clamp(2.2rem, 8vw, 3.5rem)",
-              color: "#fff",
+              fontSize: "clamp(2.2rem, 8vw, 3.5rem)", color: "#fff",
               textShadow: `0 0 30px rgba(${rgb},0.9), 0 2px 8px rgba(0,0,0,0.8)`,
-              fontFamily: "'Inter', system-ui, sans-serif",
-              letterSpacing: "-0.02em",
-            }}
-          >
+              fontFamily: "'Inter', system-ui, sans-serif", letterSpacing: "-0.02em",
+            }}>
             {game.name.toUpperCase()}
           </h2>
         </div>
-        {/* Active indicator */}
         <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full"
           style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.1)" }}>
           <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
           <span className="text-xs text-white/80 font-medium">Live</span>
         </div>
       </div>
-      {/* Card footer */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
           <Trophy className="w-4 h-4" style={{ color: `rgb(${rgb})` }} />
@@ -171,13 +158,11 @@ function GameCard({ game, onSelect }: { game: any; onSelect: () => void }) {
 }
 
 /* ─── TournamentCard ─────────────────────────────────────────────────── */
-function TournamentCard({ t: trn, isJoined, onJoin }: { t: any; isJoined: boolean; onJoin: () => void }) {
+function TournamentCard({ t: trn, isJoined, onOpenSeats }: { t: any; isJoined: boolean; onOpenSeats: () => void }) {
   const [rgb, setRgb] = useState("139,92,246");
   const isClassic = trn.mode === "classic";
   const statusColors: Record<string, string> = {
-    upcoming: "245,158,11",
-    active: "34,197,94",
-    ended: "100,116,139",
+    upcoming: "245,158,11", active: "34,197,94", ended: "100,116,139",
   };
   const sRgb = statusColors[trn.status] || "139,92,246";
   const imgSrc = trn.image_url || trn.tournament_games?.image_url;
@@ -188,30 +173,20 @@ function TournamentCard({ t: trn, isJoined, onJoin }: { t: any; isJoined: boolea
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       className="relative overflow-hidden"
-      style={{
-        borderRadius: 16,
-        border: `1.5px solid rgba(${rgb},0.3)`,
-        background: `rgba(${rgb},0.07)`,
-        boxShadow: `0 4px 24px rgba(${rgb},0.15)`,
-      }}
+      style={{ borderRadius: 16, border: `1.5px solid rgba(${rgb},0.3)`, background: `rgba(${rgb},0.07)`, boxShadow: `0 4px 24px rgba(${rgb},0.15)` }}
     >
-      {/* Top: image strip */}
       {imgSrc && (
         <div className="relative h-24 overflow-hidden">
           <img src={imgSrc} alt="" className="absolute inset-0 w-full h-full object-cover opacity-60"
             onLoad={() => getDominantColor(imgSrc, setRgb)} />
           <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 20%, rgba(8,8,20,0.95) 100%)` }} />
-          {/* Glowing frame */}
           <div className="absolute inset-0 rounded-t-2xl" style={{ boxShadow: `inset 0 0 30px rgba(${rgb},0.3)` }} />
-          {/* Mode badge */}
           <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase"
             style={{ background: `rgba(${rgb},0.3)`, border: `1px solid rgba(${rgb},0.5)`, color: `rgb(${rgb})`, backdropFilter: "blur(8px)" }}>
             {isClassic ? "Classic" : "Warehouse"}
           </div>
-          {/* Status */}
           <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full"
             style={{ background: "rgba(0,0,0,0.55)", border: `1px solid rgba(${sRgb},0.5)`, backdropFilter: "blur(8px)" }}>
             <div className="w-1.5 h-1.5 rounded-full" style={{ background: `rgb(${sRgb})` }} />
@@ -219,8 +194,6 @@ function TournamentCard({ t: trn, isJoined, onJoin }: { t: any; isJoined: boolea
           </div>
         </div>
       )}
-
-      {/* Body */}
       <div className="p-4 space-y-3">
         <div>
           <h3 className="font-bold text-white leading-tight">{trn.name}</h3>
@@ -247,8 +220,8 @@ function TournamentCard({ t: trn, isJoined, onJoin }: { t: any; isJoined: boolea
         </div>
         {trn.status !== "ended" && (
           <button
-            onClick={(e) => { e.stopPropagation(); hapticImpact("medium"); onJoin(); }}
-            disabled={isJoined || trn.current_participants >= trn.max_participants}
+            onClick={(e) => { e.stopPropagation(); hapticImpact("medium"); onOpenSeats(); }}
+            disabled={trn.current_participants >= trn.max_participants && !isJoined}
             className="w-full py-2.5 rounded-xl text-sm font-bold transition-all"
             style={{
               background: isJoined ? "rgba(34,197,94,0.15)" : `rgba(${rgb},0.25)`,
@@ -257,7 +230,7 @@ function TournamentCard({ t: trn, isJoined, onJoin }: { t: any; isJoined: boolea
               boxShadow: isJoined ? "none" : `0 0 12px rgba(${rgb},0.2)`,
             }}
           >
-            {isJoined ? "✓ Joined" : trn.current_participants >= trn.max_participants ? "Full" : "Join Tournament"}
+            {isJoined ? "✓ Joined · View Seats" : trn.current_participants >= trn.max_participants ? "Full" : "Join Tournament"}
           </button>
         )}
       </div>
@@ -266,79 +239,42 @@ function TournamentCard({ t: trn, isJoined, onJoin }: { t: any; isJoined: boolea
 }
 
 /* ─── GameTournamentsView ─────────────────────────────────────────────── */
-function GameTournamentsView({ game, onBack }: { game: any; onBack: () => void }) {
+function GameTournamentsView({
+  game,
+  onBack,
+  onOpenSeats,
+}: {
+  game: any;
+  onBack: () => void;
+  onOpenSeats: (trn: any) => void;
+}) {
   const { user } = useUser();
-  const { toast } = useToast();
-  const qc = useQueryClient();
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const { data: types = [] } = useTournamentTypes();
   const { data: tournaments = [], isLoading } = useTournaments(game.id, selectedTypeId);
   const { data: myEntries = [] } = useMyEntries(user?.telegram_id);
-  const { data: balance = 0, refetch: refetchBal } = useTournamentBalance(user?.telegram_id);
-
-  const joinMutation = useMutation({
-    mutationFn: async (trn: any) => {
-      const userId = user?.telegram_id;
-      if (!userId) throw new Error("Not logged in");
-      if (Number(balance) < Number(trn.entry_fee_usdt)) throw new Error(`Insufficient tournament balance ($${Number(balance).toFixed(2)})`);
-
-      // Deduct balance
-      const newBal = Number(balance) - Number(trn.entry_fee_usdt);
-      const { error: balErr } = await supabase.from("tournament_balances")
-        .upsert({ user_id: userId, amount: newBal, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
-      if (balErr) throw new Error(balErr.message);
-
-      // Insert entry
-      const { error: entErr } = await supabase.from("tournament_entries")
-        .insert({ tournament_id: trn.id, user_id: userId });
-      if (entErr) throw new Error("Already joined or error");
-
-      // Increment participant count
-      await supabase.from("tournaments").update({ current_participants: (trn.current_participants || 0) + 1 }).eq("id", trn.id);
-      return true;
-    },
-    onSuccess: () => {
-      hapticNotification("success");
-      toast({ title: "Joined!", description: "You have successfully joined the tournament." });
-      qc.invalidateQueries({ queryKey: ["tournaments"] });
-      qc.invalidateQueries({ queryKey: ["my_tournament_entries"] });
-      qc.invalidateQueries({ queryKey: ["tournament_balance"] });
-      refetchBal();
-    },
-    onError: (e: any) => {
-      hapticNotification("error");
-      toast({ title: "Error", description: e.message, variant: "destructive" });
-    },
-  });
 
   const classicTournaments = tournaments.filter((t: any) => t.mode === "classic");
   const warehouseTournaments = tournaments.filter((t: any) => t.mode !== "classic");
 
   return (
     <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
-      {/* Type tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <button
-          onClick={() => setSelectedTypeId(null)}
+        <button onClick={() => setSelectedTypeId(null)}
           className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
           style={{
             background: !selectedTypeId ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.05)",
             border: `1px solid ${!selectedTypeId ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
-            color: !selectedTypeId ? "#a78bfa" : "rgba(255,255,255,0.5)",
-            backdropFilter: "blur(12px)",
-          }}
-        >All</button>
+            color: !selectedTypeId ? "#a78bfa" : "rgba(255,255,255,0.5)", backdropFilter: "blur(12px)",
+          }}>All</button>
         {types.map((tp: any) => (
-          <button key={tp.id}
-            onClick={() => setSelectedTypeId(selectedTypeId === tp.id ? null : tp.id)}
+          <button key={tp.id} onClick={() => setSelectedTypeId(selectedTypeId === tp.id ? null : tp.id)}
             className="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold transition-all"
             style={{
               background: selectedTypeId === tp.id ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.05)",
               border: `1px solid ${selectedTypeId === tp.id ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)"}`,
-              color: selectedTypeId === tp.id ? "#a78bfa" : "rgba(255,255,255,0.5)",
-              backdropFilter: "blur(12px)",
-            }}
-          >{tp.name}</button>
+              color: selectedTypeId === tp.id ? "#a78bfa" : "rgba(255,255,255,0.5)", backdropFilter: "blur(12px)",
+            }}>{tp.name}</button>
         ))}
       </div>
 
@@ -351,7 +287,6 @@ function GameTournamentsView({ game, onBack }: { game: any; onBack: () => void }
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Classic section */}
           {classicTournaments.length > 0 && (
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-white/30 mb-2 px-1">Classic</p>
@@ -359,12 +294,11 @@ function GameTournamentsView({ game, onBack }: { game: any; onBack: () => void }
                 {classicTournaments.map((trn: any) => (
                   <TournamentCard key={trn.id} t={trn}
                     isJoined={myEntries.includes(trn.id)}
-                    onJoin={() => joinMutation.mutate(trn)} />
+                    onOpenSeats={() => onOpenSeats(trn)} />
                 ))}
               </div>
             </div>
           )}
-          {/* Warehouse section */}
           {warehouseTournaments.length > 0 && (
             <div>
               <p className="text-xs font-bold uppercase tracking-widest text-white/30 mb-2 px-1">Warehouse</p>
@@ -372,7 +306,7 @@ function GameTournamentsView({ game, onBack }: { game: any; onBack: () => void }
                 {warehouseTournaments.map((trn: any) => (
                   <TournamentCard key={trn.id} t={trn}
                     isJoined={myEntries.includes(trn.id)}
-                    onJoin={() => joinMutation.mutate(trn)} />
+                    onOpenSeats={() => onOpenSeats(trn)} />
                 ))}
               </div>
             </div>
@@ -386,22 +320,26 @@ function GameTournamentsView({ game, onBack }: { game: any; onBack: () => void }
 /* ─── Main TournamentPage ─────────────────────────────────────────────── */
 export function TournamentPage() {
   const { user, balances } = useUser();
-  const { data: settings } = useAppSettings();
   const { data: games = [], isLoading: gamesLoading } = useGames();
   const { data: tournamentBalance = 0, refetch: refetchBal } = useTournamentBalance(user?.telegram_id);
+  const { data: myEntries = [] } = useMyEntries(user?.telegram_id);
   const [selectedGame, setSelectedGame] = useState<any>(null);
+  const [selectedTournament, setSelectedTournament] = useState<any>(null);
+  const [walletOpen, setWalletOpen] = useState(false);
 
-  const logoUrl = settings?.app_logo_url;
-  const hasLogo = logoUrl && typeof logoUrl === "string" && logoUrl.trim() !== "" && logoUrl !== "null";
   const usdtCurrency = balances.find((b: any) => b.currencies?.symbol === "USDT")?.currencies;
   const usdtIconUrl = usdtCurrency?.icon_url || USDT_ICON;
+
+  const handleOpenSeats = (trn: any) => {
+    hapticImpact("medium");
+    setSelectedTournament(trn);
+  };
 
   return (
     <div className="space-y-4 pb-4">
       {/* ─── 3-section header ─────────────────────────────────────────── */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between gap-2"
       >
         {/* Pill 1: User photo + name */}
@@ -418,24 +356,13 @@ export function TournamentPage() {
           </span>
         </div>
 
-        {/* Pill 2: App Logo (center) */}
-        <div className="flex-shrink-0">
-          {hasLogo ? (
-            <div className="relative w-12 h-12">
-              <img src={logoUrl as string} alt="" className="absolute inset-0 w-full h-full object-contain rounded-full scale-125 blur-xl opacity-60 pointer-events-none" />
-              <div className="absolute inset-0 rounded-full border-2 border-white/30 bg-white/8 backdrop-blur-md shadow-[inset_0_2px_0_rgba(255,255,255,0.4),0_4px_20px_rgba(255,255,255,0.1)] overflow-hidden">
-                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/20 via-transparent to-transparent" />
-                <img src={logoUrl as string} alt="Logo" className="absolute inset-0 m-auto w-[75%] h-[75%] object-contain" />
-              </div>
-            </div>
-          ) : (
-            <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
-              <Trophy className="w-6 h-6 text-primary" />
-            </div>
-          )}
+        {/* Pill 2: Arena icon (center) */}
+        <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center"
+          style={{ background: "rgba(234,179,8,0.12)", border: "1.5px solid rgba(234,179,8,0.3)", boxShadow: "0 0 20px rgba(234,179,8,0.15), inset 0 1px 0 rgba(255,255,255,0.1)" }}>
+          <Swords className="w-6 h-6" style={{ color: "rgb(234,179,8)" }} />
         </div>
 
-        {/* Pill 3: Tournament balance + add */}
+        {/* Pill 3: Tournament balance + wallet */}
         <div className="flex items-center gap-2 px-3 py-2 rounded-2xl"
           style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", backdropFilter: "blur(16px)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)" }}>
           <img src={usdtIconUrl} alt="USDT" className="w-5 h-5 rounded-full object-contain" />
@@ -443,7 +370,7 @@ export function TournamentPage() {
             {Number(tournamentBalance).toFixed(2)}
           </span>
           <button
-            onClick={() => { hapticImpact("light"); refetchBal(); }}
+            onClick={() => { hapticImpact("light"); setWalletOpen(true); }}
             className="w-6 h-6 rounded-full flex items-center justify-center transition-all"
             style={{ background: "rgba(139,92,246,0.35)", border: "1px solid rgba(139,92,246,0.5)" }}
           >
@@ -454,9 +381,18 @@ export function TournamentPage() {
 
       {/* ─── content ──────────────────────────────────────────────────── */}
       <AnimatePresence mode="wait">
-        {selectedGame ? (
+        {selectedTournament ? (
+          <motion.div key="seats-view">
+            <TournamentSeatsView
+              tournament={selectedTournament}
+              balance={tournamentBalance}
+              isAlreadyJoined={myEntries.includes(selectedTournament.id)}
+              onBack={() => setSelectedTournament(null)}
+              onJoinSuccess={() => { refetchBal(); }}
+            />
+          </motion.div>
+        ) : selectedGame ? (
           <motion.div key="game-view">
-            {/* Back header */}
             <div className="flex items-center gap-3 mb-4">
               <button onClick={() => setSelectedGame(null)}
                 className="w-8 h-8 rounded-xl flex items-center justify-center"
@@ -465,11 +401,14 @@ export function TournamentPage() {
               </button>
               <h2 className="font-bold text-white">{selectedGame.name} Tournaments</h2>
             </div>
-            <GameTournamentsView game={selectedGame} onBack={() => setSelectedGame(null)} />
+            <GameTournamentsView
+              game={selectedGame}
+              onBack={() => setSelectedGame(null)}
+              onOpenSeats={handleOpenSeats}
+            />
           </motion.div>
         ) : (
           <motion.div key="games-list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            {/* Section title */}
             <div className="flex items-center gap-2 mb-3">
               <Swords className="w-4 h-4 text-primary" />
               <h2 className="text-sm font-bold text-white/70 uppercase tracking-wider">Games</h2>
@@ -497,6 +436,13 @@ export function TournamentPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* USDT Wallet Sheet */}
+      <TournamentWalletSheet
+        open={walletOpen}
+        balance={tournamentBalance}
+        onClose={() => setWalletOpen(false)}
+      />
     </div>
   );
 }
