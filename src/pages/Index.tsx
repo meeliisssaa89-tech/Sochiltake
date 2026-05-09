@@ -7,6 +7,7 @@ import { TasksPage } from "@/pages/TasksPage";
 import { LeaderboardPage } from "@/pages/LeaderboardPage";
 import { ActivityPage } from "@/pages/ActivityPage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { TournamentPage } from "@/pages/TournamentPage";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
 import { useAppSettings } from "@/hooks/useSupabaseData";
@@ -19,6 +20,7 @@ const pages: Record<string, React.ComponentType> = {
   leaderboard: LeaderboardPage,
   activity: ActivityPage,
   profile: ProfilePage,
+  tournament: TournamentPage,
 };
 
 export default function Index() {
@@ -90,57 +92,36 @@ export default function Index() {
 
         {/* ── Top bar: logo (center) + language toggle (end) ── */}
         <div className="relative flex items-center justify-center pt-3 pb-1 px-4 min-h-[52px]">
-          {/* Logo — centered */}
           {hasLogo && (
             <div className="relative w-11 h-11" data-testid="logo-frame">
-              <img
-                src={logoUrl as string}
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 w-full h-full object-contain rounded-full scale-125 blur-2xl opacity-70 pointer-events-none select-none"
-              />
-              <img
-                src={logoUrl as string}
-                alt=""
-                aria-hidden="true"
-                className="absolute inset-0 w-full h-full object-contain rounded-full scale-110 blur-md opacity-60 pointer-events-none select-none"
-              />
+              <img src={logoUrl as string} alt="" aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-contain rounded-full scale-125 blur-2xl opacity-70 pointer-events-none select-none" />
+              <img src={logoUrl as string} alt="" aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-contain rounded-full scale-110 blur-md opacity-60 pointer-events-none select-none" />
               <div className="absolute inset-0 rounded-full border-[2.5px] border-white/40 bg-white/8 backdrop-blur-md shadow-[inset_0_2px_0_rgba(255,255,255,0.45),0_6px_28px_rgba(255,255,255,0.12),inset_0_0_0_1px_rgba(255,255,255,0.15)] overflow-hidden">
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/25 via-transparent to-transparent pointer-events-none" />
-                <img
-                  src={logoUrl as string}
-                  alt="App Logo"
+                <img src={logoUrl as string} alt="App Logo"
                   className="absolute inset-0 m-auto w-[76%] h-[76%] object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.25)]"
-                  data-testid="img-app-logo"
-                />
+                  data-testid="img-app-logo" />
               </div>
             </div>
           )}
 
-          {/* Language toggle pill — always at the end (right in LTR, left in RTL) */}
           <button
             onClick={() => setLanguage(language === "en" ? "ar" : "en")}
             data-testid="button-lang-toggle"
             className="absolute end-4 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2.5 py-1 rounded-full border border-white/15 bg-white/8 backdrop-blur-md text-[11px] font-semibold text-foreground/80 hover:bg-white/15 hover:text-foreground transition-all select-none"
             aria-label="Toggle language"
           >
-            <motion.span
-              key={language}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.15 }}
-              className="text-primary"
-            >
+            <motion.span key={language} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }} className="text-primary">
               {language === "en" ? "EN" : "AR"}
             </motion.span>
             <span className="text-muted-foreground/60">|</span>
-            <span className="text-muted-foreground/70">
-              {language === "en" ? "AR" : "EN"}
-            </span>
+            <span className="text-muted-foreground/70">{language === "en" ? "AR" : "EN"}</span>
           </button>
         </div>
 
-        <main className="px-4 pt-3 pb-20">
+        <main className="px-4 pt-3 pb-24">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
