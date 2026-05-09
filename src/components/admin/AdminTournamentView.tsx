@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Trophy, Gamepad2, Users, Swords, Upload, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Plus, Trash2, Trophy, Gamepad2, Users, Swords, Loader2,
+  ChevronDown, ChevronUp, Send, Wallet, ArrowLeft,
+} from "lucide-react";
 
 /* ─── tiny hooks ─────────────────────────────────────────────────────── */
 function useAdminGames() {
@@ -16,7 +20,139 @@ function useAdminTypes() {
   return useQuery({ queryKey: ["admin_tournament_types"], queryFn: async () => (await supabase.from("tournament_types").select("*").order("sort_order")).data || [] });
 }
 function useAdminTournaments() {
-  return useQuery({ queryKey: ["admin_tournaments_all"], queryFn: async () => (await supabase.from("tournaments").select("*, tournament_games(name), tournament_types(name)").order("created_at", { ascending: false })).data || [] });
+  return useQuery({
+    queryKey: ["admin_tournaments_all"],
+    queryFn: async () => (await supabase.from("tournaments").select("*, tournament_games(name), tournament_types(name)").order("created_at", { ascending: false })).data || [],
+  });
+}
+function useTournamentParticipants(tournamentId: string | null) {
+  return useQuery({
+    queryKey: ["admin_tournament_participants", tournamentId],
+    queryFn: async () => {
+      if (!tournamentId) return [];
+      const { data } = await supabase
+        .from("tournament_player_entries")
+        .select("user_id, player_game_id, joined_at, users:user_id(first_name, username, photo_url, telegram_id)")
+        .eq("tournament_id", tournamentId)
+        .order("joined_at");
+      return (data || []) as any[];
+    },
+    enabled: !!tournamentId,
+  });
+}
+
+/* ─── Participants Panel ─────────────────────────────────────────────── */
+function TournamentParticipants({ tournament, onBack }: { tournament: any; onBack: () => void }) {
+  const { toast } = useToast();
+  const { data: participants = [], isLoading } = useTournamentParticipants(tournament.id);
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const sendMessage = async () => {
+    if (!message.trim() || participants.length === 0) return;
+    setSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-action", {
+        body: {
+          action: "send_tournament_message",
+          tournament_id: tournament.id,
+          tournament_name: tournament.name,
+          message: message.trim(),
+          user_ids: participants.map((p: any) => p.user_id),
+        },
+      });
+      if (error) throw error;
+      toast({ title: "Messages sent", description: `Sent to ${participants.length} participants` });
+      setMessage("");
+    } catch (e: any) {
+      toast({ title: "Error sending messages", description: e.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <button onClick={onBack}
+          className="w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div>
+          <p className="font-bold text-sm">{tournament.name}</p>
+          <p className="text-xs text-muted-foreground">{participants.length} participants</p>
+        </div>
+      </div>
+
+      {/* Message broadcaster */}
+      <div className="glass-card rounded-xl p-4 space-y-3">
+        <h3 className="text-sm font-bold flex items-center gap-2">
+          <Send className="w-4 h-4 text-primary" /> Send Message to All Participants
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          The message will be sent via the bot to all {participants.length} registered players.
+        </p>
+        <textarea
+          rows={3}
+          className="w-full rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm resize-none focus:outline-none focus:border-primary/50"
+          placeholder="Type your message here… (e.g. Tournament starts in 1 hour! Get ready.)"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+        <Button
+          size="sm"
+          className="w-full gap-2"
+          onClick={sendMessage}
+          disabled={sending || !message.trim() || participants.length === 0}
+        >
+          {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          {sending ? "Sending…" : `Send to ${participants.length} Players`}
+        </Button>
+      </div>
+
+      {/* Participants list */}
+      <div className="space-y-2">
+        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground px-1">Registered Players</p>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-muted/30 animate-pulse" />)}
+          </div>
+        ) : participants.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">No participants yet</div>
+        ) : (
+          participants.map((p: any, i: number) => {
+            const u = p.users;
+            const name = u?.first_name || u?.username || p.user_id;
+            return (
+              <div key={p.user_id} className="glass-card rounded-xl p-3 flex items-center gap-3">
+                <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}</span>
+                <Avatar className="w-8 h-8 border border-white/10">
+                  {u?.photo_url && <AvatarImage src={u.photo_url} />}
+                  <AvatarFallback className="text-[10px] bg-primary/20 text-primary font-bold">
+                    {(name || "?").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    ID: <span className="font-mono">{p.player_game_id || "—"}</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-muted-foreground font-mono">{p.user_id}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {new Date(p.joined_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
 }
 
 /* ─── main component ─────────────────────────────────────────────────── */
@@ -24,6 +160,7 @@ export function AdminTournamentView() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [activeSection, setActiveSection] = useState<"games" | "types" | "tournaments" | "wallet">("games");
+  const [viewingParticipants, setViewingParticipants] = useState<any | null>(null);
 
   const { data: games = [], isLoading: gamesLoading } = useAdminGames();
   const { data: types  = [] } = useAdminTypes();
@@ -126,7 +263,7 @@ export function AdminTournamentView() {
     { key: "games",       label: "Games",       icon: Gamepad2 },
     { key: "types",       label: "Types",       icon: Users },
     { key: "tournaments", label: "Tournaments", icon: Trophy },
-    { key: "wallet",      label: "Wallet",      icon: Swords },
+    { key: "wallet",      label: "Wallet",      icon: Wallet },
   ];
 
   const statusBadge = (s: string) => {
@@ -138,6 +275,16 @@ export function AdminTournamentView() {
   const inp = "w-full rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm focus:outline-none focus:border-primary/50";
   const sel = "w-full rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm";
 
+  /* show participants view if selected */
+  if (viewingParticipants) {
+    return (
+      <TournamentParticipants
+        tournament={viewingParticipants}
+        onBack={() => setViewingParticipants(null)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* Section tabs */}
@@ -146,7 +293,7 @@ export function AdminTournamentView() {
           const Icon = s.icon;
           return (
             <button key={s.key} onClick={() => setActiveSection(s.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${activeSection === s.key ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-semibold transition-all ${activeSection === s.key ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground"}`}>
               <Icon className="w-3.5 h-3.5" />{s.label}
             </button>
           );
@@ -249,10 +396,12 @@ export function AdminTournamentView() {
               <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">Start date (optional)</label><Input className="h-9 text-sm" type="datetime-local" value={newT.starts_at} onChange={(e) => setNewT({ ...newT, starts_at: e.target.value })} /></div>
               <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">End date (optional)</label><Input className="h-9 text-sm" type="datetime-local" value={newT.ends_at} onChange={(e) => setNewT({ ...newT, ends_at: e.target.value })} /></div>
             </div>
-            <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">Player ID Label (shown in join form)</label>
+            <div>
+              <label className="text-[10px] text-muted-foreground font-semibold block mb-1">Player ID Label</label>
               <Input className="h-9 text-sm" placeholder="e.g. PUBG ID, IGN, UID…" value={newT.player_id_label} onChange={(e) => setNewT({ ...newT, player_id_label: e.target.value })} />
             </div>
-            <div><label className="text-[10px] text-muted-foreground font-semibold block mb-1">Terms & Conditions (shown to player before joining)</label>
+            <div>
+              <label className="text-[10px] text-muted-foreground font-semibold block mb-1">Terms & Conditions</label>
               <textarea rows={3} className="w-full rounded-lg bg-muted/50 border border-border px-3 py-2 text-sm resize-none focus:outline-none focus:border-primary/50" placeholder="e.g. By joining you agree to fair play rules…" value={newT.terms} onChange={(e) => setNewT({ ...newT, terms: e.target.value })} />
             </div>
             <Button size="sm" className="w-full gap-2" onClick={addTournament} disabled={tLoading}>
@@ -278,6 +427,13 @@ export function AdminTournamentView() {
                       {s}
                     </button>
                   ))}
+                  <button
+                    onClick={() => setViewingParticipants(t)}
+                    className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all flex items-center gap-1"
+                    title="View participants & send message"
+                  >
+                    <Users className="w-3 h-3" /> Participants
+                  </button>
                   <button onClick={() => deleteTournament(t.id)} className="p-1 rounded-lg text-destructive hover:bg-destructive/10">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -339,7 +495,7 @@ function TournamentWalletAdmin() {
       tournament_min_deposit: Number(form.min_deposit) || 5,
       tournament_min_withdraw: Number(form.min_withdraw) || 5,
       tournament_withdraw_note: form.withdraw_note.trim() || null,
-    }).eq("id", raw?.id);
+    }).eq("id", (raw as any)?.id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else { toast({ title: "Wallet settings saved" }); refetch(); }
     setSaving(false);
@@ -351,7 +507,7 @@ function TournamentWalletAdmin() {
     <div className="space-y-3">
       <div className="glass-card rounded-xl p-4 space-y-4">
         <h3 className="text-sm font-bold flex items-center gap-2">
-          <Swords className="w-4 h-4 text-primary" /> Tournament USDT Wallet
+          <Wallet className="w-4 h-4 text-primary" /> Tournament USDT Wallet
         </h3>
 
         <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border">
@@ -394,7 +550,7 @@ function TournamentWalletAdmin() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground">Withdrawal Note (shown to users)</label>
+          <label className="text-xs font-semibold text-muted-foreground">Withdrawal Note</label>
           <textarea rows={2} className={`${inp} resize-none`} placeholder="e.g. Withdrawals processed within 24h…" value={form.withdraw_note} onChange={(e) => setForm({ ...form, withdraw_note: e.target.value })} />
         </div>
 
