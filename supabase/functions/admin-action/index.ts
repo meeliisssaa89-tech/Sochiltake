@@ -486,92 +486,51 @@ Deno.serve(async (req) => {
 
 
       case 'run_tournament_migration': {
-        // Create tournament tables if they don't exist
-        const migrationSQL = `
-          CREATE TABLE IF NOT EXISTS tournament_games (
-            id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-            name text NOT NULL,
-            image_url text,
-            is_active boolean DEFAULT true,
-            sort_order int DEFAULT 0,
-            created_at timestamptz DEFAULT now()
-          );
-          CREATE TABLE IF NOT EXISTS tournament_types (
-            id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-            name text NOT NULL,
-            sort_order int DEFAULT 0,
-            is_active boolean DEFAULT true
-          );
-          CREATE TABLE IF NOT EXISTS tournaments (
-            id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-            game_id uuid REFERENCES tournament_games(id) ON DELETE CASCADE,
-            type_id uuid REFERENCES tournament_types(id) ON DELETE SET NULL,
-            name text NOT NULL,
-            mode text DEFAULT 'classic',
-            image_url text,
-            entry_fee_usdt numeric DEFAULT 0,
-            prize_pool numeric DEFAULT 0,
-            max_participants int DEFAULT 100,
-            current_participants int DEFAULT 0,
-            status text DEFAULT 'upcoming',
-            starts_at timestamptz,
-            ends_at timestamptz,
-            created_at timestamptz DEFAULT now()
-          );
-          CREATE TABLE IF NOT EXISTS tournament_balances (
-            id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-            user_id text NOT NULL UNIQUE,
-            amount numeric DEFAULT 0,
-            created_at timestamptz DEFAULT now(),
-            updated_at timestamptz DEFAULT now()
-          );
-          CREATE TABLE IF NOT EXISTS tournament_entries (
-            id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-            tournament_id uuid REFERENCES tournaments(id) ON DELETE CASCADE,
-            user_id text NOT NULL,
-            registered_at timestamptz DEFAULT now(),
-            result_rank int,
-            prize_won numeric DEFAULT 0,
-            UNIQUE(tournament_id, user_id)
-          );
-          INSERT INTO tournament_types (name, sort_order) VALUES ('Single', 0), ('Duo', 1), ('Team', 2) ON CONFLICT DO NOTHING;
-          ALTER TABLE tournament_games ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE tournament_types ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE tournaments ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE tournament_balances ENABLE ROW LEVEL SECURITY;
-          ALTER TABLE tournament_entries ENABLE ROW LEVEL SECURITY;
-          DO $do$ BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_games' AND policyname='public read tournament_games') THEN
-              CREATE POLICY "public read tournament_games" ON tournament_games FOR SELECT USING (true);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_types' AND policyname='public read tournament_types') THEN
-              CREATE POLICY "public read tournament_types" ON tournament_types FOR SELECT USING (true);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournaments' AND policyname='public read tournaments') THEN
-              CREATE POLICY "public read tournaments" ON tournaments FOR SELECT USING (true);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_balances' AND policyname='public read tournament_balances') THEN
-              CREATE POLICY "public read tournament_balances" ON tournament_balances FOR SELECT USING (true);
-              CREATE POLICY "public write tournament_balances" ON tournament_balances FOR INSERT WITH CHECK (true);
-              CREATE POLICY "public update tournament_balances" ON tournament_balances FOR UPDATE USING (true);
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_entries' AND policyname='public read tournament_entries') THEN
-              CREATE POLICY "public read tournament_entries" ON tournament_entries FOR SELECT USING (true);
-              CREATE POLICY "public insert tournament_entries" ON tournament_entries FOR INSERT WITH CHECK (true);
-            END IF;
-          END $do$;
-        `;
-        try {
-          const { error } = await admin.rpc('exec_sql' as any, { query: migrationSQL });
-          if (error) {
-            // Try alternative: use postgres URL directly
-            const pgUrl = Deno.env.get('SUPABASE_DB_URL');
-            if (!pgUrl) return json({ error: 'Migration failed: ' + error.message + '. No DB URL available.' }, 500);
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+        const pgMetaUrl = url.replace('.supabase.co', '.supabase.co');
+        const SQL_STATEMENTS = [
+          `CREATE TABLE IF NOT EXISTS tournament_games (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, image_url text, is_active boolean DEFAULT true, sort_order int DEFAULT 0, created_at timestamptz DEFAULT now())`,
+          `CREATE TABLE IF NOT EXISTS tournament_types (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text NOT NULL, sort_order int DEFAULT 0, is_active boolean DEFAULT true)`,
+          `CREATE TABLE IF NOT EXISTS tournaments (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, game_id uuid REFERENCES tournament_games(id) ON DELETE CASCADE, type_id uuid REFERENCES tournament_types(id) ON DELETE SET NULL, name text NOT NULL, mode text DEFAULT 'classic', image_url text, entry_fee_usdt numeric DEFAULT 0, prize_pool numeric DEFAULT 0, max_participants int DEFAULT 100, current_participants int DEFAULT 0, status text DEFAULT 'upcoming', starts_at timestamptz, ends_at timestamptz, created_at timestamptz DEFAULT now())`,
+          `CREATE TABLE IF NOT EXISTS tournament_balances (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, user_id text NOT NULL UNIQUE, amount numeric DEFAULT 0, created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now())`,
+          `CREATE TABLE IF NOT EXISTS tournament_entries (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, tournament_id uuid REFERENCES tournaments(id) ON DELETE CASCADE, user_id text NOT NULL, registered_at timestamptz DEFAULT now(), result_rank int, prize_won numeric DEFAULT 0, UNIQUE(tournament_id, user_id))`,
+          `INSERT INTO tournament_types (name, sort_order) VALUES ('Single', 0), ('Duo', 1), ('Team', 2) ON CONFLICT DO NOTHING`,
+          `ALTER TABLE tournament_games ENABLE ROW LEVEL SECURITY`,
+          `ALTER TABLE tournament_types ENABLE ROW LEVEL SECURITY`,
+          `ALTER TABLE tournaments ENABLE ROW LEVEL SECURITY`,
+          `ALTER TABLE tournament_balances ENABLE ROW LEVEL SECURITY`,
+          `ALTER TABLE tournament_entries ENABLE ROW LEVEL SECURITY`,
+          `DO $do$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_games' AND policyname='public read tournament_games') THEN CREATE POLICY "public read tournament_games" ON tournament_games FOR SELECT USING (true); END IF; IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_types' AND policyname='public read tournament_types') THEN CREATE POLICY "public read tournament_types" ON tournament_types FOR SELECT USING (true); END IF; IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournaments' AND policyname='public read tournaments') THEN CREATE POLICY "public read tournaments" ON tournaments FOR SELECT USING (true); END IF; IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_balances' AND policyname='public read tournament_balances') THEN CREATE POLICY "public read tournament_balances" ON tournament_balances FOR SELECT USING (true); CREATE POLICY "public write tournament_balances" ON tournament_balances FOR INSERT WITH CHECK (true); CREATE POLICY "public update tournament_balances" ON tournament_balances FOR UPDATE USING (true); END IF; IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='tournament_entries' AND policyname='public read tournament_entries') THEN CREATE POLICY "public read tournament_entries" ON tournament_entries FOR SELECT USING (true); CREATE POLICY "public insert tournament_entries" ON tournament_entries FOR INSERT WITH CHECK (true); END IF; END $do$`,
+        ];
+        
+        const errors: string[] = [];
+        for (const stmt of SQL_STATEMENTS) {
+          try {
+            const res = await fetch(`${url}/rest/v1/rpc/run_sql`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` },
+              body: JSON.stringify({ query: stmt }),
+            });
+            if (!res.ok) {
+              // Try postgres meta
+              const errBody = await res.text();
+              // Ignore "already exists" errors
+              if (!errBody.includes('already exists') && !errBody.includes('42P07') && !errBody.includes('42710')) {
+                errors.push(`stmt failed: ${errBody.substring(0, 100)}`);
+              }
+            }
+          } catch(e) {
+            errors.push((e as Error).message);
           }
-          return json({ ok: true, message: 'Tournament tables created successfully' });
-        } catch(e) {
-          return json({ error: 'Migration error: ' + (e as Error).message }, 500);
         }
+        
+        // Verify by checking if tables exist
+        const { data: tg } = await admin.from('tournament_games').select('id').limit(1);
+        const { data: tt } = await admin.from('tournament_types').select('id').limit(1);
+        const { data: tn } = await admin.from('tournaments').select('id').limit(1);
+        
+        const tablesExist = tg !== null && tt !== null && tn !== null;
+        return json({ ok: tablesExist, tables_ready: tablesExist, errors: errors.length > 0 ? errors : undefined });
       }
 
       default:
