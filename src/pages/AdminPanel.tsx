@@ -23,15 +23,16 @@ import { AdminActivityView } from "@/components/admin/AdminActivityView";
 import { AdminPromoCodesView } from "@/components/admin/AdminPromoCodesView";
 import { AdminBotView } from "@/components/admin/AdminBotView";
 import { AdminShortlinkView } from "@/components/admin/AdminShortlinkView";
+import { AdminTournamentView } from "@/components/admin/AdminTournamentView";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import {
   LayoutDashboard, Users, ListChecks, Coins, Settings, Search, Ban, ArrowLeft,
   TrendingUp, DollarSign, CheckCircle2, UserPlus, Image as ImageIcon, Send,
   Sparkles, Wallet, Upload, Loader2, Trophy, Tag, Bot, ExternalLink,
-  X, Plus, Minus, Trash2, Activity, Star, Shield, ChevronRight,
+  X, Plus, Minus, Trash2, Activity, Star, Shield, ChevronRight, Swords,
 } from "lucide-react";
 
-type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo" | "bot" | "shortlink";
+type AdminTab = "dashboard" | "users" | "tasks" | "currencies" | "ads" | "spin" | "wallet" | "icons" | "broadcast" | "settings" | "withdrawals" | "activity" | "promo" | "bot" | "shortlink" | "tournament";
 
 export function AdminPanel() {
   const [session, setSession] = useState<any>(null);
@@ -144,6 +145,7 @@ function AdminPanelInner({ adminEmail }: { adminEmail: string }) {
     { id: "broadcast" as const, icon: Send, label: t("broadcast") },
     { id: "bot" as const, icon: Bot, label: t("bot") },
     { id: "shortlink" as const, icon: ExternalLink, label: "Shortlink" },
+    { id: "tournament" as const, icon: Swords, label: "Tournaments" },
     { id: "settings" as const, icon: Settings, label: t("settings") },
     { id: "admins" as const, icon: Shield, label: "Admin Access" },
   ];
@@ -196,6 +198,7 @@ function AdminPanelInner({ adminEmail }: { adminEmail: string }) {
         {activeTab === "broadcast" && <AdminBroadcastView />}
         {activeTab === "bot" && <AdminBotView />}
         {activeTab === "shortlink" && <AdminShortlinkView />}
+        {activeTab === "tournament" && <AdminTournamentView />}
         {activeTab === "settings" && <AdminSettingsView />}
         {activeTab === "admins" && <AdminAccessView currentEmail={adminEmail} />}
       </div>
