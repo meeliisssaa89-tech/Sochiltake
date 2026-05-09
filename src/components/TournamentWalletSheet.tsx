@@ -45,7 +45,7 @@ export function TournamentWalletSheet({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-[55] flex items-end justify-center"
           style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
           onClick={onClose}
         >
@@ -68,7 +68,10 @@ export function TournamentWalletSheet({
               <div className="w-10 h-1 rounded-full bg-white/20" />
             </div>
 
-            <div className="px-5 pb-8 space-y-4">
+            <div
+              className="px-5 space-y-4 overflow-y-auto"
+              style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom) + 5.5rem)", maxHeight: "80vh" }}
+            >
               {/* Header */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
