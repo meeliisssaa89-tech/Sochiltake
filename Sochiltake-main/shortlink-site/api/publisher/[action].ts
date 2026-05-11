@@ -215,7 +215,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const { data } = await supabase
       .from("shortlink_pub_articles")
-      .select("id, slug, title, content, cover_url, status, visit_count, earnings, created_at, rejection_reason, sections, source")
+      .select("id, slug, title, content, cover_url, status, visit_count, earnings, created_at, rejection_reason, sections, source, linked_shortlink_code")
       .eq("publisher_id", me.id)
       .order("created_at", { ascending: false });
     return res.status(200).json({ articles: data || [] });
