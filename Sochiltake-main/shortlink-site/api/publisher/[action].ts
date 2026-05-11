@@ -2,7 +2,7 @@
 // Handles every /api/publisher/* sub-action: signup, login, logout, me, articles, status, ai_generate.
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyCors } from "../_lib/cors.js";
-import { pubDb as supabase, getPubSettings as getSettings } from "../_lib/supabase.js";
+import { supabase, getSettings } from "../_lib/supabase.js";
 import {
   hashPublisherPassword, generateLinkCode, generateSlug, signToken,
   setPubCookie, clearPubCookie, getSecret, requirePublisher,
@@ -12,8 +12,9 @@ import { generateArticleSectionsViaAI } from "../_lib/articles.js";
 import crypto from "crypto";
 
 // Multi-section validation rules (also reflected in the editor UI).
+// min_section_chars can be overridden per-deployment by shortlink_settings.min_section_chars.
 const MIN_SECTIONS = 3;
-const MIN_SECTION_CHARS = 5000;
+const DEFAULT_MIN_SECTION_CHARS = 500;
 
 interface SectionInput {
   title?: unknown;
@@ -21,7 +22,10 @@ interface SectionInput {
   image_url?: unknown;
 }
 
-function normaliseSections(raw: unknown): { ok: true; sections: any[]; combined: string } | { ok: false; error: string } {
+function normaliseSections(
+  raw: unknown,
+  minSectionChars = DEFAULT_MIN_SECTION_CHARS,
+): { ok: true; sections: any[]; combined: string } | { ok: false; error: string } {
   if (!Array.isArray(raw)) return { ok: false, error: "sections must be an array" };
   if (raw.length < MIN_SECTIONS) {
     return { ok: false, error: `At least ${MIN_SECTIONS} sections (tabs) are required.` };
@@ -36,16 +40,13 @@ function normaliseSections(raw: unknown): { ok: true; sections: any[]; combined:
     if (title.length < 3) {
       return { ok: false, error: `Section ${i + 1}: title is required.` };
     }
-    if (content.length < MIN_SECTION_CHARS) {
-      return { ok: false, error: `Section ${i + 1}: at least ${MIN_SECTION_CHARS} characters required (currently ${content.length}).` };
-    }
-    if (!image_url) {
-      return { ok: false, error: `Section ${i + 1}: an image URL is required.` };
+    if (content.length < minSectionChars) {
+      return { ok: false, error: `Section ${i + 1}: at least ${minSectionChars} characters required (currently ${content.length}).` };
     }
     out.push({
       title: title.slice(0, 200),
       content: content.slice(0, 80000),
-      image_url: image_url.slice(0, 500),
+      image_url: image_url ? image_url.slice(0, 500) : null,
     });
     combined += (combined ? "\n\n" : "") + `# ${title}\n\n${content}`;
   }
@@ -65,7 +66,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case "ai_models":   return handleAiModels(req, res);
     case "ai_generate": return handleAiGenerate(req, res);
     case "shortlinks":  return handleShortlinks(req, res);
-    case "payout":      return handlePayout(req, res);
     default:            return res.status(404).json({ error: `Unknown publisher action: ${action}` });
   }
 }
@@ -73,13 +73,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 // -- status (public) ---------------------------------------------------------
 async function handleStatus(_req: VercelRequest, res: VercelResponse) {
   const s = await getSettings();
+  const minChars = s.min_section_chars ? Number(s.min_section_chars) : DEFAULT_MIN_SECTION_CHARS;
   return res.status(200).json({
-    publishers_enabled: !!s.publishers_enabled,
-    signup_enabled: !!s.signup_enabled,
+    publishers_enabled: s.publishers_enabled !== false,
+    signup_enabled: s.signup_enabled !== false,
     site_title: s.site_title || "Articles Hub",
     brand_color: s.brand_color || "#7c3aed",
     min_sections: MIN_SECTIONS,
-    min_section_chars: MIN_SECTION_CHARS,
+    min_section_chars: minChars,
   });
 }
 
@@ -167,8 +168,7 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
     publisher: {
       id: pub.id, email: pub.email,
       display_name: pub.display_name, link_code: pub.link_code,
-      pending_balance: Number(pub.pending_balance || 0),
-      available_balance: Number(pub.available_balance || 0),
+      pending_balance: pub.pending_balance,
     },
   });
 }
@@ -187,7 +187,7 @@ async function handleMe(req: VercelRequest, res: VercelResponse) {
 
   const { data: articles } = await supabase
     .from("shortlink_pub_articles")
-    .select("id, slug, title, status, visit_count, earnings, created_at, rejection_reason, cover_url, sections")
+    .select("id, slug, title, cover_url, sections, linked_shortlink_code, status, visit_count, earnings, created_at, rejection_reason")
     .eq("publisher_id", me.id)
     .order("created_at", { ascending: false });
 
@@ -196,7 +196,6 @@ async function handleMe(req: VercelRequest, res: VercelResponse) {
       id: me.row.id, email: me.row.email,
       display_name: me.row.display_name, link_code: me.row.link_code,
       pending_balance: Number(me.row.pending_balance || 0),
-      available_balance: Number(me.row.available_balance || 0),
       lifetime_earnings: Number(me.row.lifetime_earnings || 0),
       total_visits: me.row.total_visits || 0,
       linked_telegram_id: me.row.linked_telegram_id,
@@ -223,12 +222,14 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    const { title, cover_url, sections } = req.body || {};
+    const { title, cover_url, sections, linked_shortlink_code } = req.body || {};
     const t = String(title || "").trim();
     if (t.length < 4) return res.status(400).json({ error: "Title (4+) required" });
 
-    const norm = normaliseSections(sections);
-    if (!norm.ok) return res.status(400).json({ error: (norm as any).error });
+    const settings2 = await getSettings();
+    const minChars2 = settings2.min_section_chars ? Number(settings2.min_section_chars) : DEFAULT_MIN_SECTION_CHARS;
+    const norm = normaliseSections(sections, minChars2);
+    if (!norm.ok) return res.status(400).json({ error: norm.error });
 
     const settings = await getSettings();
     const requireApproval = settings.articles_require_approval !== false;
@@ -247,6 +248,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
         content: norm.combined,
         cover_url: (cover_url ? String(cover_url) : norm.sections[0].image_url).slice(0, 500),
         sections: norm.sections,
+        linked_shortlink_code: linked_shortlink_code ? String(linked_shortlink_code).slice(0,50) : null,
         status: requireApproval ? "pending" : "approved",
       })
       .select().single();
@@ -256,14 +258,17 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "PATCH") {
     if (!id) return res.status(400).json({ error: "id required" });
-    const { title, cover_url, sections } = req.body || {};
+    const { title, cover_url, sections, linked_shortlink_code } = req.body || {};
     const update: any = { updated_at: new Date().toISOString() };
     if (title) update.title = String(title).slice(0, 200);
     if (cover_url !== undefined) update.cover_url = cover_url ? String(cover_url).slice(0, 500) : null;
+    if (linked_shortlink_code !== undefined) update.linked_shortlink_code = linked_shortlink_code ? String(linked_shortlink_code).slice(0,50) : null;
 
     if (sections !== undefined) {
-      const norm = normaliseSections(sections);
-      if (!norm.ok) return res.status(400).json({ error: (norm as any).error });
+      const patchSettings = await getSettings();
+      const patchMinChars = patchSettings.min_section_chars ? Number(patchSettings.min_section_chars) : DEFAULT_MIN_SECTION_CHARS;
+      const norm = normaliseSections(sections, patchMinChars);
+      if (!norm.ok) return res.status(400).json({ error: norm.error });
       update.sections = norm.sections;
       update.content = norm.combined;
       if (!update.cover_url) update.cover_url = norm.sections[0].image_url;
@@ -444,42 +449,4 @@ async function handleShortlinks(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(400).json({ error: `Unknown op: ${op}` });
-}
-
-// -- payout (publisher requests payout of available balance) -----------------
-async function handlePayout(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  if (!(await ensurePublishersEnabled(res))) return;
-  const me = await requirePublisher(req, res);
-  if (!me) return;
-
-  const { method, details } = req.body || {};
-  if (!method || !details || String(details).trim().length < 5) {
-    return res.status(400).json({ error: "Payment method and details are required." });
-  }
-
-  const { data: pub } = await supabase
-    .from("shortlink_publishers")
-    .select("available_balance, pending_balance")
-    .eq("id", me.id)
-    .maybeSingle();
-
-  if (!pub) return res.status(404).json({ error: "Publisher not found." });
-
-  const settings = await getSettings();
-  const minPayout = Number(settings.min_payout || 1);
-  const available = Number(pub.available_balance || 0);
-
-  if (available < minPayout) {
-    return res.status(400).json({
-      error: `Minimum payout is $${minPayout.toFixed(2)}. Your available balance is $${available.toFixed(4)}.`,
-    });
-  }
-
-  // Log the payout request (insert into payout requests table if exists, or just acknowledge)
-  // For now we store it as a settings note — in production wire up a payout_requests table
-  return res.status(200).json({
-    ok: true,
-    message: `Payout request received for $${available.toFixed(4)} via ${String(method)}. Our team will process it within 1-3 business days.`,
-  });
 }
