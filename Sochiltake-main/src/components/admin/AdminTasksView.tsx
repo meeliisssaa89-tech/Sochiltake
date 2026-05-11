@@ -22,7 +22,7 @@ interface TaskForm {
   title_ar: string;
   description_en: string;
   description_ar: string;
-  type: "telegram_join" | "watch_ad" | "social_link" | "code_api";
+  type: "telegram_join" | "watch_ad" | "social_link" | "code_api" | "submission";
   reward_amount: number;
   reward_currency_id: string | null;
   extra_rewards: Array<{ currency_id: string; amount: number }>;
