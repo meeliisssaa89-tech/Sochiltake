@@ -12,8 +12,9 @@ import { generateArticleSectionsViaAI } from "../_lib/articles.js";
 import crypto from "crypto";
 
 // Multi-section validation rules (also reflected in the editor UI).
+// min_section_chars can be overridden per-deployment by shortlink_settings.min_section_chars.
 const MIN_SECTIONS = 3;
-const MIN_SECTION_CHARS = 5000;
+const DEFAULT_MIN_SECTION_CHARS = 500;
 
 interface SectionInput {
   title?: unknown;
@@ -21,7 +22,10 @@ interface SectionInput {
   image_url?: unknown;
 }
 
-function normaliseSections(raw: unknown): { ok: true; sections: any[]; combined: string } | { ok: false; error: string } {
+function normaliseSections(
+  raw: unknown,
+  minSectionChars = DEFAULT_MIN_SECTION_CHARS,
+): { ok: true; sections: any[]; combined: string } | { ok: false; error: string } {
   if (!Array.isArray(raw)) return { ok: false, error: "sections must be an array" };
   if (raw.length < MIN_SECTIONS) {
     return { ok: false, error: `At least ${MIN_SECTIONS} sections (tabs) are required.` };
@@ -36,16 +40,13 @@ function normaliseSections(raw: unknown): { ok: true; sections: any[]; combined:
     if (title.length < 3) {
       return { ok: false, error: `Section ${i + 1}: title is required.` };
     }
-    if (content.length < MIN_SECTION_CHARS) {
-      return { ok: false, error: `Section ${i + 1}: at least ${MIN_SECTION_CHARS} characters required (currently ${content.length}).` };
-    }
-    if (!image_url) {
-      return { ok: false, error: `Section ${i + 1}: an image URL is required.` };
+    if (content.length < minSectionChars) {
+      return { ok: false, error: `Section ${i + 1}: at least ${minSectionChars} characters required (currently ${content.length}).` };
     }
     out.push({
       title: title.slice(0, 200),
       content: content.slice(0, 80000),
-      image_url: image_url.slice(0, 500),
+      image_url: image_url ? image_url.slice(0, 500) : null,
     });
     combined += (combined ? "\n\n" : "") + `# ${title}\n\n${content}`;
   }
@@ -72,13 +73,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 // -- status (public) ---------------------------------------------------------
 async function handleStatus(_req: VercelRequest, res: VercelResponse) {
   const s = await getSettings();
+  const minChars = s.min_section_chars ? Number(s.min_section_chars) : DEFAULT_MIN_SECTION_CHARS;
   return res.status(200).json({
-    publishers_enabled: !!s.publishers_enabled,
-    signup_enabled: !!s.signup_enabled,
+    publishers_enabled: s.publishers_enabled !== false,
+    signup_enabled: s.signup_enabled !== false,
     site_title: s.site_title || "Articles Hub",
     brand_color: s.brand_color || "#7c3aed",
     min_sections: MIN_SECTIONS,
-    min_section_chars: MIN_SECTION_CHARS,
+    min_section_chars: minChars,
   });
 }
 
@@ -213,7 +215,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const { data } = await supabase
       .from("shortlink_pub_articles")
-      .select("id, slug, title, content, cover_url, status, visit_count, earnings, created_at, rejection_reason, sections, source")
+      .select("id, slug, title, content, cover_url, status, visit_count, earnings, created_at, rejection_reason, sections, source, linked_shortlink_code")
       .eq("publisher_id", me.id)
       .order("created_at", { ascending: false });
     return res.status(200).json({ articles: data || [] });
@@ -224,7 +226,9 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
     const t = String(title || "").trim();
     if (t.length < 4) return res.status(400).json({ error: "Title (4+) required" });
 
-    const norm = normaliseSections(sections);
+    const settings2 = await getSettings();
+    const minChars2 = settings2.min_section_chars ? Number(settings2.min_section_chars) : DEFAULT_MIN_SECTION_CHARS;
+    const norm = normaliseSections(sections, minChars2);
     if (!norm.ok) return res.status(400).json({ error: norm.error });
 
     const settings = await getSettings();
@@ -261,7 +265,9 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
     if (linked_shortlink_code !== undefined) update.linked_shortlink_code = linked_shortlink_code ? String(linked_shortlink_code).slice(0,50) : null;
 
     if (sections !== undefined) {
-      const norm = normaliseSections(sections);
+      const patchSettings = await getSettings();
+      const patchMinChars = patchSettings.min_section_chars ? Number(patchSettings.min_section_chars) : DEFAULT_MIN_SECTION_CHARS;
+      const norm = normaliseSections(sections, patchMinChars);
       if (!norm.ok) return res.status(400).json({ error: norm.error });
       update.sections = norm.sections;
       update.content = norm.combined;
