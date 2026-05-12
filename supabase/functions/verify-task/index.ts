@@ -11,7 +11,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { userId, taskId, action, code } = await req.json();
+    const { userId, taskId, action, code, submissionData } = await req.json();
 
     if (!userId || !taskId) {
       return new Response(
@@ -63,6 +63,8 @@ Deno.serve(async (req) => {
       return await handleSocialLink(supabase, userId, task, existingTask, action);
     } else if (task.type === 'code_api') {
       return await handleCodeApi(supabase, userId, task, existingTask, action, code);
+    } else if (task.type === 'submission') {
+      return await handleSubmission(supabase, userId, task, existingTask, action, submissionData);
     }
 
     return new Response(
@@ -474,6 +476,71 @@ async function handleCodeApi(
   }
 
   return await completeTask(supabase, userId, task, existingTask);
+}
+
+async function handleSubmission(
+  supabase: any,
+  userId: string,
+  task: any,
+  existingTask: any,
+  action: string,
+  submissionData?: any,
+) {
+  // If already pending (awaiting review) — just return status
+  if (existingTask?.status === 'pending') {
+    return new Response(
+      JSON.stringify({ status: 'pending', message: 'Your submission is under review.' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // "start" action: return submission form info so the client knows what type to show
+  if (action !== 'submit') {
+    return new Response(
+      JSON.stringify({
+        status: 'started',
+        submission_type: task.metadata?.submission_type || 'text',
+        submission_label: task.metadata?.submission_label || 'Submit your information',
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // "submit" action: persist the submission
+  if (!submissionData) {
+    return new Response(
+      JSON.stringify({ error: 'Submission data is required', verified: false }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const now = new Date().toISOString();
+  const meta = {
+    submission_type: task.metadata?.submission_type || 'text',
+    submission_url: submissionData.submission_url || null,
+    submission_text: submissionData.submission_text || null,
+    submission_email: submissionData.submission_email || null,
+    submitted_at: now,
+  };
+
+  if (existingTask) {
+    await supabase.from('user_tasks')
+      .update({ status: 'pending', started_at: now, metadata: meta })
+      .eq('id', existingTask.id);
+  } else {
+    await supabase.from('user_tasks').insert({
+      user_id: userId,
+      task_id: task.id,
+      status: 'pending',
+      started_at: now,
+      metadata: meta,
+    });
+  }
+
+  return new Response(
+    JSON.stringify({ status: 'submitted', message: 'Your submission has been received and is under review.' }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
 }
 
 function generateToken(): string {
