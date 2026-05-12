@@ -146,7 +146,7 @@ export async function requirePublisher(
 
 export async function ensurePublishersEnabled(res: VercelResponse): Promise<boolean> {
   const settings = await getSettings();
-  if (!settings.publishers_enabled) {
+  if (settings.publishers_enabled === false) {
     res.status(403).json({ error: "Publisher program is not active yet." });
     return false;
   }
@@ -155,7 +155,7 @@ export async function ensurePublishersEnabled(res: VercelResponse): Promise<bool
 
 export async function ensureSignupEnabled(res: VercelResponse): Promise<boolean> {
   const settings = await getSettings();
-  if (!settings.signup_enabled) {
+  if (settings.signup_enabled === false) {
     res.status(403).json({ error: "Sign-up is currently closed." });
     return false;
   }
