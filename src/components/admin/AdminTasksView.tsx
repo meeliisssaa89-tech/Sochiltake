@@ -22,7 +22,7 @@ interface TaskForm {
   title_ar: string;
   description_en: string;
   description_ar: string;
-  type: "telegram_join" | "watch_ad" | "social_link" | "code_api";
+  type: "telegram_join" | "watch_ad" | "social_link" | "code_api" | "submission";
   reward_amount: number;
   reward_currency_id: string | null;
   extra_rewards: Array<{ currency_id: string; amount: number }>;
@@ -295,6 +295,7 @@ export function AdminTasksView() {
                   <SelectItem value="social_link">Social Link / Visit</SelectItem>
                   <SelectItem value="watch_ad">Watch Ad</SelectItem>
                   <SelectItem value="code_api">Code Verification (External API)</SelectItem>
+                  <SelectItem value="submission">Submission (Manual Review)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -427,6 +428,41 @@ export function AdminTasksView() {
                   onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, channel_url: e.target.value } })}
                   className="h-8 text-xs"
                   placeholder="https://t.me/MyChannel"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Submission metadata */}
+          {editing.type === "submission" && (
+            <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
+              <p className="text-[10px] font-medium text-primary">Submission Task Settings</p>
+              <p className="text-[10px] text-muted-foreground">
+                User fills a form (photo, text, email, or ID document). Admin reviews submissions manually in the Submissions tab.
+                Reward is credited after admin approval.
+              </p>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Submission Type</label>
+                <Select
+                  value={editing.metadata?.submission_type || "text"}
+                  onValueChange={(v) => setEditing({ ...editing, metadata: { ...editing.metadata, submission_type: v } })}
+                >
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Text (written response)</SelectItem>
+                    <SelectItem value="email">Email address</SelectItem>
+                    <SelectItem value="photo">Photo (image upload)</SelectItem>
+                    <SelectItem value="id_document">ID Document (image upload)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Submission instructions (shown to user)</label>
+                <Input
+                  value={editing.metadata?.submission_label || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, submission_label: e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="e.g. Upload a screenshot of your completed action"
                 />
               </div>
             </div>
