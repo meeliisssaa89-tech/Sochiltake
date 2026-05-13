@@ -437,6 +437,7 @@ export function TournamentPage() {
       <TournamentWalletSheet
         open={walletOpen}
         balance={tournamentBalance}
+        userId={user?.telegram_id}
         onClose={() => setWalletOpen(false)}
       />
     </div>
