@@ -45,20 +45,22 @@ export default function PublicArticlePage() {
   const taskToken = params.get("t") || params.get("token")   || "";
   const isCodeMode = !!(userId && taskToken);
 
-  const [data,       setData]       = useState<any>(null);
-  const [err,        setErr]        = useState<string | null>(null);
-  const [activePage, setActivePage] = useState(0);
-  const [pagesRead,  setPagesRead]  = useState<Set<number>>(new Set([0]));
-  const [waitLeft,   setWaitLeft]   = useState(0);
-  const [waitPerPage,setWaitPerPage]= useState(8);
-  const [canContinue,setCanContinue]= useState(false);
-  const [code,       setCode]       = useState<string | null>(null);
-  const [codeBusy,   setCodeBusy]   = useState(false);
-  const [codeErr,    setCodeErr]    = useState<string | null>(null);
-  const [copied,     setCopied]     = useState(false);
-  const [redirecting,setRedirecting]= useState(false);
+  const [data,        setData]        = useState<any>(null);
+  const [err,         setErr]         = useState<string | null>(null);
+  const [activePage,  setActivePage]  = useState(0);
+  const [pagesRead,   setPagesRead]   = useState<Set<number>>(new Set([0]));
+  const [waitLeft,    setWaitLeft]    = useState(0);
+  const [waitPerPage, setWaitPerPage] = useState(8);
+  const [canContinue, setCanContinue] = useState(false);
+  const [code,        setCode]        = useState<string | null>(null);
+  const [codeBusy,    setCodeBusy]    = useState(false);
+  const [codeErr,     setCodeErr]     = useState<string | null>(null);
+  const [copied,      setCopied]      = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
+  const [slideDir,    setSlideDir]    = useState<"forward" | "back">("forward");
   const headInjected = useRef(false);
   const lastTickRef  = useRef<number>(0);
+  const contentRef   = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -126,7 +128,8 @@ export default function PublicArticlePage() {
   const isLast  = activePage === total - 1;
   const allRead = pagesRead.size >= total;
 
-  const goPage = (i: number) => {
+  const goPage = (i: number, dir?: "forward" | "back") => {
+    setSlideDir(dir ?? (i > activePage ? "forward" : "back"));
     setActivePage(i);
     setPagesRead((prev) => new Set([...Array.from(prev), i]));
     setWaitLeft(waitPerPage);
@@ -135,11 +138,9 @@ export default function PublicArticlePage() {
   };
 
   const onContinue = () => {
-    if (!isLast) { goPage(activePage + 1); return; }
-    // Last page reached
+    if (!isLast) { goPage(activePage + 1, "forward"); return; }
     if (isCodeMode) {
       if (linkedShortlink) {
-        // Redirect through shortlink
         setRedirecting(true);
         setTimeout(() => { window.location.href = `/s/${linkedShortlink}`; }, 600);
       } else {
@@ -173,93 +174,95 @@ export default function PublicArticlePage() {
     });
   };
 
-  const current = rawSections[activePage] || rawSections[0];
+  const current  = rawSections[activePage] || rawSections[0];
   const progress = ((activePage + 1) / total) * 100;
-  // Countdown ring (50px circle, circumference ~157)
-  const ringMax = 157;
-  const ringOffset = waitLeft > 0 ? ringMax * (1 - (waitLeft / waitPerPage)) : 0;
+
+  // Countdown ring (56px circle, circumference ~176)
+  const ringR   = 22;
+  const ringMax = 2 * Math.PI * ringR;
+  const ringOffset = waitLeft > 0 ? ringMax * (waitLeft / waitPerPage) : 0;
+
+  const canGoNext = !isCodeMode || canContinue;
+  const canGoPrev = activePage > 0;
 
   return (
-    <div className="min-h-screen pb-16">
-      {/* Site header */}
+    <div className="min-h-screen" style={{ paddingBottom: "80px" }}>
+      {/* Sticky header */}
       <header className="site-header">
         <div className="max-w-3xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-white" style={{ background: brand }}>⚡</div>
             <span className="font-bold text-sm">{siteName}</span>
           </div>
-          {isCodeMode && (
-            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-3)" }}>
-              <span>Page {activePage + 1}/{total}</span>
-              <span>·</span>
-              <span>{pagesRead.size} read</span>
-            </div>
+          {total > 1 && (
+            <span className="text-xs" style={{ color: "var(--text-3)" }}>
+              {activePage + 1} / {total}
+            </span>
           )}
         </div>
-        {/* Reading progress bar */}
-        <div className="progress-bar rounded-none" style={{ borderRadius: 0 }}>
+        {/* Progress bar */}
+        <div className="progress-bar">
           <div className="progress-fill" style={{ width: `${progress}%` }} />
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-5">
         <AdSlot html={settings.ad_top_html} />
 
         {/* Cover image */}
-        {(a.cover_url || current.image_url) && (
+        {a.cover_url && (
           <div className="relative overflow-hidden rounded-2xl">
             <img
-              src={a.cover_url || current.image_url || ""}
+              src={a.cover_url}
               alt={a.title}
-              className="w-full object-cover max-h-80"
+              className="w-full object-cover max-h-72"
               style={{ borderRadius: 16 }}
             />
-            <div className="absolute inset-0 rounded-2xl" style={{ background: "linear-gradient(to bottom, transparent 50%, rgba(8,8,15,0.8))" }} />
+            <div className="absolute inset-0 rounded-2xl" style={{ background: "linear-gradient(to bottom, transparent 40%, rgba(8,8,15,0.85))" }} />
           </div>
         )}
 
-        {/* Article title + meta */}
+        {/* Title + meta */}
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold leading-tight mb-2">{a.title}</h1>
           <p className="text-xs" style={{ color: "var(--text-3)" }}>
-            Published {new Date(a.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+            {new Date(a.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
             {total > 1 && ` · ${total} pages`}
           </p>
         </div>
 
-        {/* Page indicator tabs (compact) */}
+        {/* Step dots navigation */}
         {total > 1 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-            {rawSections.map((s, i) => {
-              const read = pagesRead.has(i);
-              const active = activePage === i;
+          <div className="step-dots">
+            {rawSections.map((_, i) => {
+              const isActive = activePage === i;
+              const isRead   = pagesRead.has(i) && !isActive;
               return (
                 <button
                   key={i}
                   onClick={() => goPage(i)}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
-                  style={{
-                    background: active ? `${brand}22` : "var(--surface-1)",
-                    border: `1px solid ${active ? brand+"66" : "var(--border)"}`,
-                    color: active ? brand : read ? "var(--text-1)" : "var(--text-3)",
-                  }}
-                  data-testid={`tab-page-${i}`}
-                >
-                  {read && !active && <span style={{ color: "var(--success)" }}>✓</span>}
-                  {i + 1}. {(s.title || `Page ${i+1}`).slice(0, 18)}
-                </button>
+                  title={rawSections[i].title || `Page ${i + 1}`}
+                  className={`step-dot ${isActive ? "active" : isRead ? "read" : "unread"}`}
+                  style={{ width: isActive ? 20 : 6 }}
+                />
               );
             })}
           </div>
         )}
 
-        {/* Current section content */}
-        <div className="glass p-6 md:p-8 slide-up" key={activePage}>
+        {/* Section content — directional slide animation */}
+        <div
+          ref={contentRef}
+          className={`glass p-5 md:p-7 ${slideDir === "forward" ? "slide-forward" : "slide-back"}`}
+          key={activePage}
+        >
           {current.image_url && current.image_url !== a.cover_url && (
             <img src={current.image_url} alt={current.title}
-              className="w-full object-cover max-h-72 rounded-xl mb-5" />
+              className="w-full object-cover max-h-64 rounded-xl mb-4" />
           )}
-          <h2 className="text-xl md:text-2xl font-bold mb-5">{current.title}</h2>
+          {current.title && current.title !== a.title && (
+            <h2 className="text-xl md:text-2xl font-bold mb-4">{current.title}</h2>
+          )}
           <div className="article-prose">
             {renderParagraphs(current.content, settings.ad_middle_html)}
           </div>
@@ -267,48 +270,36 @@ export default function PublicArticlePage() {
 
         <AdSlot html={settings.ad_bottom_html} />
 
-        {/* Navigation / CTA */}
-        {isCodeMode ? (
-          <div className="glass-strong p-6 text-center space-y-4">
+        {/* Code-mode CTA (only when on last page or showing timer) */}
+        {isCodeMode && (
+          <div className="glass-strong p-5 text-center space-y-4 rounded-2xl">
             {/* Countdown ring */}
             {!canContinue && !code && (
-              <div className="flex flex-col items-center gap-3">
-                <div className="relative">
-                  <svg width="60" height="60" viewBox="0 0 60 60" style={{ transform: "rotate(-90deg)" }}>
-                    <circle cx="30" cy="30" r="25" fill="none" stroke="var(--border)" strokeWidth="4" />
-                    <circle cx="30" cy="30" r="25" fill="none" stroke={brand} strokeWidth="4"
-                      strokeDasharray="157" strokeDashoffset={ringOffset}
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative inline-flex items-center justify-center">
+                  <svg width="56" height="56" viewBox="0 0 56 56">
+                    {/* Track */}
+                    <circle cx="28" cy="28" r={ringR} fill="none" stroke="var(--border-strong)" strokeWidth="4" />
+                    {/* Progress — starts at top, goes clockwise */}
+                    <circle
+                      cx="28" cy="28" r={ringR} fill="none"
+                      stroke={brand} strokeWidth="4"
+                      strokeDasharray={ringMax}
+                      strokeDashoffset={ringMax - ringOffset}
                       strokeLinecap="round"
+                      transform="rotate(-90 28 28)"
                       style={{ transition: "stroke-dashoffset 1s linear" }}
                     />
                   </svg>
-                  <span className="absolute inset-0 flex items-center justify-center text-lg font-bold" style={{ color: brand }}>{waitLeft}</span>
+                  <span className="absolute text-base font-black tabular-nums" style={{ color: brand }}>{waitLeft}</span>
                 </div>
                 <p className="text-sm" style={{ color: "var(--text-2)" }}>
-                  {isLast ? "Almost done — wait to unlock" : `Continue in ${waitLeft}s`}
+                  {isLast ? "Almost there — hang tight" : `Read this page for ${waitLeft}s`}
                 </p>
               </div>
             )}
 
-            {/* Continue / claim button */}
-            {!code && !redirecting && (
-              <>
-                {codeErr && <p className="text-xs text-red-400">{codeErr}</p>}
-                <button
-                  onClick={onContinue}
-                  disabled={!canContinue || codeBusy || !allRead}
-                  className="btn-brand w-full text-base py-3"
-                  data-testid="button-continue"
-                >
-                  {codeBusy ? "Processing…" : !allRead ? `Read all ${total} pages first` : !canContinue ? `Wait ${waitLeft}s` : isLast ? (linkedShortlink ? "Continue to destination →" : "Get verification code") : `Continue to page ${activePage + 2} →`}
-                </button>
-                {!allRead && canContinue && (
-                  <p className="text-xs" style={{ color: "var(--text-3)" }}>You still need to read {total - pagesRead.size} more page(s).</p>
-                )}
-              </>
-            )}
-
-            {/* Redirecting state */}
+            {/* Redirecting */}
             {redirecting && (
               <div className="flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: brand, borderTopColor: "transparent" }} />
@@ -316,16 +307,19 @@ export default function PublicArticlePage() {
               </div>
             )}
 
+            {/* Error */}
+            {codeErr && <p className="text-xs text-red-400">{codeErr}</p>}
+
             {/* Code reveal */}
-            {code && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-center gap-2 text-green-400 font-semibold">
-                  <span>✅</span> Your verification code
-                </div>
+            {code ? (
+              <div className="code-box space-y-3">
+                <p className="text-sm font-semibold" style={{ color: "var(--success)" }}>✅ Verification Code</p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xl font-mono font-black py-3 px-4 rounded-xl text-center select-all"
-                    style={{ background: "rgba(0,0,0,0.4)", border: `1px solid ${brand}55`, color: brand }}
-                    data-testid="text-final-code">
+                  <code
+                    className="flex-1 text-2xl font-mono font-black py-3 px-4 rounded-xl text-center select-all"
+                    style={{ background: "rgba(0,0,0,0.45)", border: `1px solid ${brand}55`, color: brand }}
+                    data-testid="text-final-code"
+                  >
                     {code}
                   </code>
                   <button onClick={copyCode} className="btn-ghost px-3 py-3 text-sm">
@@ -333,37 +327,95 @@ export default function PublicArticlePage() {
                   </button>
                 </div>
                 <p className="text-xs" style={{ color: "var(--text-3)" }}>
-                  Return to the Telegram app and paste this code to claim your reward.
+                  Return to Telegram and paste this code to claim your reward.
                 </p>
+              </div>
+            ) : !redirecting && isLast && canContinue && (
+              <div className="space-y-2">
+                {!allRead && (
+                  <p className="text-xs" style={{ color: "var(--text-3)" }}>
+                    Still need to read {total - pagesRead.size} more page(s) first.
+                  </p>
+                )}
+                <button
+                  onClick={onContinue}
+                  disabled={codeBusy || !allRead}
+                  className="btn-brand w-full text-base py-3"
+                  data-testid="button-continue"
+                >
+                  {codeBusy ? "Processing…" : !allRead ? `Read all ${total} pages first` : linkedShortlink ? "Continue to destination →" : "Get verification code"}
+                </button>
               </div>
             )}
           </div>
-        ) : (
-          /* Normal reading navigation */
-          total > 1 && (
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => goPage(Math.max(0, activePage - 1))}
-                disabled={activePage === 0}
-                className="btn-ghost"
-              >
-                ← Previous
-              </button>
-              <span className="text-xs" style={{ color: "var(--text-3)" }}>{activePage + 1} / {total}</span>
-              <button
-                onClick={() => goPage(Math.min(total - 1, activePage + 1))}
-                disabled={activePage >= total - 1}
-                className="btn-brand"
-                data-testid="button-next-page"
-              >
-                Next →
-              </button>
-            </div>
-          )
         )}
       </main>
 
-      <footer className="text-center py-6 text-xs" style={{ color: "var(--text-3)" }}>
+      {/* ── Fixed bottom navigation bar ── */}
+      <div className="bottom-nav">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
+          {/* Prev */}
+          <button
+            onClick={() => goPage(activePage - 1, "back")}
+            disabled={!canGoPrev}
+            className="btn-ghost px-4 py-2.5 shrink-0"
+            style={{ opacity: canGoPrev ? 1 : 0.35 }}
+          >
+            ←
+          </button>
+
+          {/* Centre: step info OR timer for code mode */}
+          <div className="flex-1 text-center">
+            {isCodeMode && !code && !canContinue ? (
+              <span className="text-xs" style={{ color: "var(--text-3)" }}>
+                Wait {waitLeft}s • Page {activePage + 1}/{total}
+              </span>
+            ) : (
+              <span className="text-xs" style={{ color: "var(--text-3)" }}>
+                {activePage + 1} / {total}
+                {isCodeMode && ` · ${pagesRead.size} read`}
+              </span>
+            )}
+          </div>
+
+          {/* Next / Continue / Claim */}
+          {isCodeMode ? (
+            isLast ? (
+              !code && !redirecting && (
+                <button
+                  onClick={onContinue}
+                  disabled={!canContinue || codeBusy || !allRead}
+                  className="btn-brand px-5 py-2.5 shrink-0 text-sm"
+                  data-testid="button-continue"
+                >
+                  {codeBusy ? "…" : !allRead ? "Read all first" : !canContinue ? `${waitLeft}s` : linkedShortlink ? "Go →" : "Get Code"}
+                </button>
+              )
+            ) : (
+              <button
+                onClick={() => goPage(activePage + 1, "forward")}
+                disabled={!canContinue}
+                className="btn-brand px-5 py-2.5 shrink-0 text-sm"
+                data-testid="button-next-page"
+                style={{ opacity: canContinue ? 1 : 0.45 }}
+              >
+                {canContinue ? "Next →" : `${waitLeft}s`}
+              </button>
+            )
+          ) : (
+            <button
+              onClick={() => goPage(Math.min(total - 1, activePage + 1), "forward")}
+              disabled={activePage >= total - 1}
+              className="btn-brand px-5 py-2.5 shrink-0 text-sm"
+              data-testid="button-next-page"
+            >
+              Next →
+            </button>
+          )}
+        </div>
+      </div>
+
+      <footer className="text-center py-4 text-xs" style={{ color: "var(--text-3)" }}>
         © {new Date().getFullYear()} {siteName}
       </footer>
     </div>
