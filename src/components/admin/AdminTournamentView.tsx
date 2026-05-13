@@ -451,6 +451,14 @@ export function AdminTournamentView() {
   );
 }
 
+/* ─── default payment methods template ──────────────────────────────── */
+const DEFAULT_PAYMENT_METHODS = [
+  { id: "usdt_trc20", name: "USDT TRC20", coin: "USDT", network: "TRC20", address: "", icon: "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040", enabled: true },
+  { id: "ton",        name: "TON",        coin: "TON",  network: "TON",   address: "", icon: "https://cryptologos.cc/logos/toncoin-ton-logo.svg?v=040",    enabled: false },
+  { id: "bnb",        name: "BNB (BSC)",  coin: "BNB",  network: "BSC",   address: "", icon: "https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=040",         enabled: false },
+  { id: "eth",        name: "ETH ERC20",  coin: "ETH",  network: "ERC20", address: "", icon: "https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=040",    enabled: false },
+];
+
 /* ─── TournamentWalletAdmin ──────────────────────────────────────────── */
 function TournamentWalletAdmin() {
   const { toast } = useToast();
@@ -464,40 +472,72 @@ function TournamentWalletAdmin() {
   });
 
   const [form, setForm] = useState({
-    deposit_enabled: false, withdraw_enabled: false,
-    deposit_address: "", deposit_network: "TRC20",
-    min_deposit: "5", min_withdraw: "5", withdraw_note: "",
+    deposit_enabled: false,
+    withdraw_enabled: false,
+    min_deposit: "5",
+    min_withdraw: "5",
+    withdraw_note: "",
+    exchange_rate: "1",
   });
+  const [methods, setMethods] = useState(DEFAULT_PAYMENT_METHODS.map((m) => ({ ...m })));
   const [formLoaded, setFormLoaded] = useState(false);
 
   useEffect(() => {
     if (raw && !formLoaded) {
       setForm({
-        deposit_enabled: (raw as any).tournament_deposit_enabled ?? false,
+        deposit_enabled:  (raw as any).tournament_deposit_enabled  ?? false,
         withdraw_enabled: (raw as any).tournament_withdraw_enabled ?? false,
-        deposit_address: (raw as any).tournament_deposit_address ?? "",
-        deposit_network: (raw as any).tournament_deposit_network ?? "TRC20",
-        min_deposit: String((raw as any).tournament_min_deposit ?? 5),
-        min_withdraw: String((raw as any).tournament_min_withdraw ?? 5),
-        withdraw_note: (raw as any).tournament_withdraw_note ?? "",
+        min_deposit:      String((raw as any).tournament_min_deposit  ?? 5),
+        min_withdraw:     String((raw as any).tournament_min_withdraw ?? 5),
+        withdraw_note:    (raw as any).tournament_withdraw_note ?? "",
+        exchange_rate:    String((raw as any).tournament_exchange_rate ?? 1),
       });
+      const savedMethods = (raw as any).tournament_payment_methods;
+      if (Array.isArray(savedMethods) && savedMethods.length > 0) {
+        // Merge saved into defaults so new coins appear automatically
+        const merged = DEFAULT_PAYMENT_METHODS.map((def) => {
+          const saved = savedMethods.find((m: any) => m.id === def.id);
+          return saved ? { ...def, ...saved } : { ...def };
+        });
+        // Append any extra coins from saved that aren't in defaults
+        savedMethods.forEach((m: any) => {
+          if (!merged.find((d) => d.id === m.id)) merged.push(m);
+        });
+        setMethods(merged);
+      }
       setFormLoaded(true);
     }
   }, [raw, formLoaded]);
 
+  const updateMethod = (id: string, field: string, value: any) => {
+    setMethods((prev) => prev.map((m) => m.id === id ? { ...m, [field]: value } : m));
+  };
+
+  const addCustomMethod = () => {
+    const id = `custom_${Date.now()}`;
+    setMethods((prev) => [...prev, { id, name: "Custom", coin: "", network: "", address: "", icon: "", enabled: false }]);
+  };
+
+  const removeMethod = (id: string) => {
+    setMethods((prev) => prev.filter((m) => m.id !== id));
+  };
+
   const save = async () => {
     setSaving(true);
     const { error } = await supabase.from("app_settings").update({
-      tournament_deposit_enabled: form.deposit_enabled,
+      tournament_deposit_enabled:  form.deposit_enabled,
       tournament_withdraw_enabled: form.withdraw_enabled,
-      tournament_deposit_address: form.deposit_address.trim() || null,
-      tournament_deposit_network: form.deposit_network.trim() || "TRC20",
-      tournament_min_deposit: Number(form.min_deposit) || 5,
-      tournament_min_withdraw: Number(form.min_withdraw) || 5,
-      tournament_withdraw_note: form.withdraw_note.trim() || null,
+      tournament_min_deposit:      Number(form.min_deposit)  || 5,
+      tournament_min_withdraw:     Number(form.min_withdraw) || 5,
+      tournament_withdraw_note:    form.withdraw_note.trim() || null,
+      tournament_exchange_rate:    Number(form.exchange_rate) || 1,
+      tournament_payment_methods:  methods,
+      // backward-compat: keep single address for old clients
+      tournament_deposit_address:  methods.find((m) => m.enabled)?.address || null,
+      tournament_deposit_network:  methods.find((m) => m.enabled)?.network || "TRC20",
     }).eq("id", (raw as any)?.id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-    else { toast({ title: "Wallet settings saved" }); refetch(); }
+    else { toast({ title: "Wallet settings saved ✓" }); refetch(); }
     setSaving(false);
   };
 
@@ -505,15 +545,16 @@ function TournamentWalletAdmin() {
 
   return (
     <div className="space-y-3">
-      <div className="glass-card rounded-xl p-4 space-y-4">
+      {/* On/Off toggles */}
+      <div className="glass-card rounded-xl p-4 space-y-3">
         <h3 className="text-sm font-bold flex items-center gap-2">
-          <Wallet className="w-4 h-4 text-primary" /> Tournament USDT Wallet
+          <Wallet className="w-4 h-4 text-primary" /> Tournament Wallet Settings
         </h3>
 
         <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border">
           <div>
             <p className="text-sm font-medium">Enable Deposits</p>
-            <p className="text-xs text-muted-foreground">Allow players to deposit USDT</p>
+            <p className="text-xs text-muted-foreground">Players can deposit crypto</p>
           </div>
           <Switch checked={form.deposit_enabled} onCheckedChange={(v) => setForm({ ...form, deposit_enabled: v })} />
         </div>
@@ -521,43 +562,88 @@ function TournamentWalletAdmin() {
         <div className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border">
           <div>
             <p className="text-sm font-medium">Enable Withdrawals</p>
-            <p className="text-xs text-muted-foreground">Allow players to withdraw USDT</p>
+            <p className="text-xs text-muted-foreground">Players can request withdrawals</p>
           </div>
           <Switch checked={form.withdraw_enabled} onCheckedChange={(v) => setForm({ ...form, withdraw_enabled: v })} />
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Deposit Wallet Address</label>
-          <input className={inp} placeholder="TRC20 / BEP20 address…" value={form.deposit_address} onChange={(e) => setForm({ ...form, deposit_address: e.target.value })} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-muted-foreground">Network</label>
-            <select className={inp} value={form.deposit_network} onChange={(e) => setForm({ ...form, deposit_network: e.target.value })}>
-              <option>TRC20</option><option>BEP20</option><option>ERC20</option><option>Polygon</option>
-            </select>
-          </div>
+        <div className="grid grid-cols-3 gap-2">
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground">Min Deposit ($)</label>
             <input className={inp} type="number" min="0" value={form.min_deposit} onChange={(e) => setForm({ ...form, min_deposit: e.target.value })} />
           </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted-foreground">Min Withdraw ($)</label>
+            <input className={inp} type="number" min="0" value={form.min_withdraw} onChange={(e) => setForm({ ...form, min_withdraw: e.target.value })} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-muted-foreground">Exchange Rate</label>
+            <input className={inp} type="number" min="0" step="0.01" value={form.exchange_rate} onChange={(e) => setForm({ ...form, exchange_rate: e.target.value })} />
+          </div>
         </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-muted-foreground">Min Withdrawal ($)</label>
-          <input className={inp} type="number" min="0" value={form.min_withdraw} onChange={(e) => setForm({ ...form, min_withdraw: e.target.value })} />
-        </div>
+        <p className="text-[10px] text-muted-foreground">
+          Exchange rate = how many app points equal 1 USD (e.g. 100 = 100 pts/$). Used to show equivalent values.
+        </p>
 
         <div className="space-y-1">
           <label className="text-xs font-semibold text-muted-foreground">Withdrawal Note</label>
           <textarea rows={2} className={`${inp} resize-none`} placeholder="e.g. Withdrawals processed within 24h…" value={form.withdraw_note} onChange={(e) => setForm({ ...form, withdraw_note: e.target.value })} />
         </div>
-
-        <Button size="sm" className="w-full gap-2" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Save Wallet Settings
-        </Button>
       </div>
+
+      {/* Payment methods */}
+      <div className="glass-card rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold">Payment Methods</h3>
+          <Button size="sm" variant="outline" className="h-7 text-[10px] gap-1" onClick={addCustomMethod}>
+            <Plus className="w-3 h-3" /> Add
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground">Enable one or more networks. Players will see a tab for each enabled method.</p>
+
+        <div className="space-y-3">
+          {methods.map((m) => (
+            <div key={m.id} className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                {m.icon && <img src={m.icon} alt={m.coin} className="w-5 h-5 rounded-full" onError={(e) => { (e.currentTarget as any).style.display = "none"; }} />}
+                <span className="text-sm font-semibold flex-1">{m.name}</span>
+                <Switch checked={m.enabled} onCheckedChange={(v) => updateMethod(m.id, "enabled", v)} />
+                {m.id.startsWith("custom_") && (
+                  <button onClick={() => removeMethod(m.id)} className="text-destructive p-1">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {m.enabled && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">Display Name</label>
+                      <input className={inp} value={m.name} onChange={(e) => updateMethod(m.id, "name", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-muted-foreground">Network</label>
+                      <input className={inp} value={m.network} onChange={(e) => updateMethod(m.id, "network", e.target.value)} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Wallet Address</label>
+                    <input className={inp} placeholder="Paste wallet address…" value={m.address} onChange={(e) => updateMethod(m.id, "address", e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground">Icon URL (optional)</label>
+                    <input className={inp} placeholder="https://…" value={m.icon} onChange={(e) => updateMethod(m.id, "icon", e.target.value)} />
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Button size="sm" className="w-full gap-2" onClick={save} disabled={saving}>
+        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Save All Wallet Settings
+      </Button>
     </div>
   );
 }
