@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, Loader2, RefreshCw, AlertTriangle, Database } from "lucide-react";
+import { Trash2, Loader2, RefreshCw, AlertTriangle, Database, Zap } from "lucide-react";
 
 interface CleanupStat {
   label: string;
@@ -19,6 +19,7 @@ export function AdminCleanupView() {
   const qc = useQueryClient();
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirms, setConfirms] = useState<Record<string, boolean>>({});
+  const [cleaningAll, setCleaningAll] = useState(false);
 
   const cutoff30 = new Date(Date.now() - 30 * 86400000).toISOString();
   const cutoff7  = new Date(Date.now() - 7  * 86400000).toISOString();
@@ -118,6 +119,51 @@ export function AdminCleanupView() {
         await supabase.from("referrals").delete().lt("created_at", cutoff90);
       },
     },
+    {
+      label: "Old Activity Feed (30d+)",
+      description: "activity_feed entries older than 30 days",
+      queryKey: "cleanup-activity-feed",
+      color: "text-cyan-500",
+      countFn: async () => {
+        const { count } = await supabase
+          .from("activity_feed").select("id", { count: "exact", head: true })
+          .lt("created_at", cutoff30);
+        return count || 0;
+      },
+      deleteFn: async () => {
+        await supabase.from("activity_feed").delete().lt("created_at", cutoff30);
+      },
+    },
+    {
+      label: "Old Broadcast Records (90d+)",
+      description: "broadcasts records older than 90 days",
+      queryKey: "cleanup-broadcasts",
+      color: "text-rose-500",
+      countFn: async () => {
+        const { count } = await supabase
+          .from("broadcasts").select("id", { count: "exact", head: true })
+          .lt("created_at", cutoff90);
+        return count || 0;
+      },
+      deleteFn: async () => {
+        await supabase.from("broadcasts").delete().lt("created_at", cutoff90);
+      },
+    },
+    {
+      label: "Old Shortlink Visits (30d+)",
+      description: "shortlink_visits records older than 30 days",
+      queryKey: "cleanup-shortlink-visits",
+      color: "text-violet-500",
+      countFn: async () => {
+        const { count } = await supabase
+          .from("shortlink_visits").select("id", { count: "exact", head: true })
+          .lt("visited_at", cutoff30);
+        return count || 0;
+      },
+      deleteFn: async () => {
+        await supabase.from("shortlink_visits").delete().lt("visited_at", cutoff30);
+      },
+    },
   ];
 
   const handleDelete = async (stat: CleanupStat) => {
@@ -138,6 +184,27 @@ export function AdminCleanupView() {
     }
   };
 
+  const handleCleanAll = async () => {
+    if (!confirm("Clean ALL old records from all tables? This cannot be undone.")) return;
+    setCleaningAll(true);
+    let cleaned = 0;
+    let errors = 0;
+    for (const stat of stats) {
+      try {
+        await stat.deleteFn();
+        qc.invalidateQueries({ queryKey: [stat.queryKey] });
+        cleaned++;
+      } catch {
+        errors++;
+      }
+    }
+    setCleaningAll(false);
+    toast({
+      title: `Cleanup complete`,
+      description: `${cleaned} tables cleaned${errors ? `, ${errors} failed` : ""}.`,
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="glass-card rounded-xl p-4 flex items-start gap-3">
@@ -148,6 +215,25 @@ export function AdminCleanupView() {
             Delete old records to free up database space. These operations are permanent and cannot be undone.
             Each delete requires a confirmation click.
           </p>
+        </div>
+      </div>
+
+      {/* Supabase free tier limits */}
+      <div className="glass-card rounded-xl p-3 border border-primary/20 space-y-2">
+        <p className="text-xs font-semibold text-primary flex items-center gap-1.5">
+          <Database className="w-3.5 h-3.5" /> Supabase Free Tier Limits
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Database", limit: "500 MB" },
+            { label: "Storage", limit: "1 GB" },
+            { label: "Bandwidth", limit: "5 GB/mo" },
+          ].map((item) => (
+            <div key={item.label} className="text-center p-2 rounded-lg bg-muted/30 border border-border">
+              <p className="text-[11px] font-bold">{item.limit}</p>
+              <p className="text-[9px] text-muted-foreground">{item.label}</p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -164,12 +250,22 @@ export function AdminCleanupView() {
         ))}
       </div>
 
+      <Button
+        variant="destructive"
+        className="w-full h-9 text-xs gap-2"
+        onClick={handleCleanAll}
+        disabled={cleaningAll || !!deleting}
+      >
+        {cleaningAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+        {cleaningAll ? "Cleaning all tables…" : "Clean All Old Records (One Click)"}
+      </Button>
+
       <div className="glass-card rounded-xl p-4 flex items-center gap-3 border border-destructive/20">
         <Database className="w-5 h-5 text-muted-foreground shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold">Supabase Usage</p>
+          <p className="text-xs font-semibold">Monitor Supabase Usage</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            Monitor database size in your Supabase dashboard → Project Settings → Database.
+            Check database size in Supabase Dashboard → Project Settings → Database.
             Free tier limit: 500 MB.
           </p>
         </div>
