@@ -21,7 +21,20 @@ Deno.serve(async (req) => {
 
     const { data: users } = await supabase.from('users').select('telegram_id').eq('is_banned', false);
 
-    const reply_markup = buttons.length ? { inline_keyboard: [buttons.map((b: any) => ({ text: b.text, url: b.url }))] } : undefined;
+    // Build inline keyboard — support both regular URL buttons and Web App buttons
+    let reply_markup: any = undefined;
+    if (buttons.length > 0) {
+      const validButtons = (buttons as any[]).filter((b: any) => b.text && b.url);
+      if (validButtons.length > 0) {
+        const row = validButtons.map((b: any) => {
+          if (b.type === 'webapp') {
+            return { text: b.text, web_app: { url: b.url } };
+          }
+          return { text: b.text, url: b.url };
+        });
+        reply_markup = { inline_keyboard: [row] };
+      }
+    }
 
     let sent = 0, failed = 0;
     for (const u of (users || [])) {
