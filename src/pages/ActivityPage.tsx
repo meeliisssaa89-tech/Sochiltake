@@ -34,14 +34,16 @@ const FEED_ICONS: Record<string, { icon: any; color: string; bg: string }> = {
 };
 
 const ACH_ICONS: Record<string, any> = {
-  tasks_completed: CheckCircle2,
-  referrals:       Users,
-  checkin_streak:  Target,
-  daily_logins:    Target,
-  ads_watched:     Eye,
-  level:           TrendingUp,
-  spins:           Repeat2,
-  default:         Award,
+  tasks_completed:   CheckCircle2,
+  referrals:         Users,
+  referral_ads:      Eye,
+  referral_earnings: TrendingUp,
+  checkin_streak:    Target,
+  daily_logins:      Target,
+  ads_watched:       Eye,
+  level:             TrendingUp,
+  spins:             Repeat2,
+  default:           Award,
 };
 
 interface Achievement {
@@ -93,6 +95,47 @@ export function ActivityPage() {
     enabled: !!user?.telegram_id,
   });
 
+  // Referrals' total ads watched
+  const { data: referralAds = 0 } = useQuery({
+    queryKey: ["referral-ads", user?.telegram_id],
+    queryFn: async () => {
+      if (!user?.telegram_id) return 0;
+      const { data: refs } = await supabase
+        .from("referrals")
+        .select("referee_id")
+        .eq("referrer_id", user.telegram_id);
+      if (!refs || refs.length === 0) return 0;
+      const refereeIds = refs.map((r) => r.referee_id);
+      const { count } = await supabase
+        .from("ad_watches")
+        .select("id", { count: "exact", head: true })
+        .in("user_id", refereeIds);
+      return count || 0;
+    },
+    enabled: !!user?.telegram_id,
+  });
+
+  // Referrals' total earnings (count of balance credit events / tasks completed by referees)
+  const { data: referralEarnings = 0 } = useQuery({
+    queryKey: ["referral-earnings", user?.telegram_id],
+    queryFn: async () => {
+      if (!user?.telegram_id) return 0;
+      const { data: refs } = await supabase
+        .from("referrals")
+        .select("referee_id")
+        .eq("referrer_id", user.telegram_id);
+      if (!refs || refs.length === 0) return 0;
+      const refereeIds = refs.map((r) => r.referee_id);
+      const { count } = await supabase
+        .from("user_tasks")
+        .select("id", { count: "exact", head: true })
+        .in("user_id", refereeIds)
+        .eq("status", "completed");
+      return count || 0;
+    },
+    enabled: !!user?.telegram_id,
+  });
+
   const { data: lifetimeCheckins = 0 } = useQuery({
     queryKey: ["lifetime-checkins", user?.telegram_id],
     queryFn: async () => {
@@ -121,13 +164,15 @@ export function ActivityPage() {
 
   const getCurrent = (ach: Achievement): number => {
     switch (ach.goal_type) {
-      case "tasks_completed": return completedCount;
-      case "referrals":       return referralCount;
-      case "checkin_streak":  return streak;
-      case "daily_logins":    return lifetimeCheckins;
-      case "ads_watched":     return lifetimeAds;
-      case "level":           return userLevel;
-      default:                return 0;
+      case "tasks_completed":   return completedCount;
+      case "referrals":         return referralCount;
+      case "referral_ads":      return referralAds;
+      case "referral_earnings": return referralEarnings;
+      case "checkin_streak":    return streak;
+      case "daily_logins":      return lifetimeCheckins;
+      case "ads_watched":       return lifetimeAds;
+      case "level":             return userLevel;
+      default:                  return 0;
     }
   };
 
