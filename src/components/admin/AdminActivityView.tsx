@@ -21,13 +21,15 @@ interface Achievement {
 }
 
 const GOAL_TYPES = [
-  { value: "referrals",       label: "Invite Friends" },
-  { value: "ads_watched",     label: "Ads Watched (lifetime)" },
-  { value: "level",           label: "Reach Level" },
-  { value: "daily_logins",    label: "Daily Check-ins (lifetime)" },
-  { value: "checkin_streak",  label: "Check-in Streak (consecutive)" },
-  { value: "tasks_completed", label: "Tasks Completed" },
-  { value: "spins",           label: "Spins" },
+  { value: "referrals",         label: "Invite Friends" },
+  { value: "referral_ads",      label: "Referrals' Total Ads Watched" },
+  { value: "referral_earnings", label: "Referrals' Total Earnings (any currency)" },
+  { value: "ads_watched",       label: "Ads Watched (lifetime)" },
+  { value: "level",             label: "Reach Level" },
+  { value: "daily_logins",      label: "Daily Check-ins (lifetime)" },
+  { value: "checkin_streak",    label: "Check-in Streak (consecutive)" },
+  { value: "tasks_completed",   label: "Tasks Completed" },
+  { value: "spins",             label: "Spins" },
 ];
 
 const TYPE_COLORS: Record<string, string> = {
