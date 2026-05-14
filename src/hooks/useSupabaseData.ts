@@ -178,7 +178,7 @@ export function useWatchAd() {
   });
 }
 
-export function useLeaderboard(type: "tasks" | "referrals") {
+export function useLeaderboard(type: "tasks" | "referrals" | "balance") {
   return useQuery({
     queryKey: ["leaderboard", type],
     queryFn: async () => {
@@ -224,6 +224,32 @@ export function useLeaderboard(type: "tasks" | "referrals") {
           .sort((a, b) => b.score - a.score)
           .slice(0, 50);
       }
+
+      // Balance leaderboard: sum all balances per user weighted by exchange_rate
+      const { data: balData, error: balError } = await supabase
+        .from("balances")
+        .select("user_id, amount, currencies(symbol, exchange_rate, decimals), users(first_name, last_name, username)")
+        .gt("amount", 0);
+      if (balError) throw balError;
+
+      const totals: Record<string, { usd: number; user: any }> = {};
+      (balData || []).forEach((b: any) => {
+        const rate = Number(b.currencies?.exchange_rate || 1);
+        const usd = Number(b.amount) * rate;
+        if (!totals[b.user_id]) totals[b.user_id] = { usd: 0, user: b.users };
+        totals[b.user_id].usd += usd;
+      });
+      return Object.entries(totals)
+        .map(([userId, { usd, user }]) => ({
+          userId,
+          name: `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || user?.username || "User",
+          username: user?.username,
+          photo_url: null,
+          score: Math.round(usd * 1000) / 1000,
+          scoreLabel: "USDT",
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 50);
     },
   });
 }

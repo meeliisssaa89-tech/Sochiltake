@@ -47,11 +47,48 @@ Deno.serve(async (req) => {
       .eq('task_id', taskId)
       .single();
 
+    // ── Renewal: if task is completed + renewable + period elapsed → reset ──
     if (existingTask?.status === 'completed') {
-      return new Response(
-        JSON.stringify({ error: 'Task already completed', userTask: existingTask }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      if (task.renewal_hours) {
+        const msSince = Date.now() - new Date(existingTask.completed_at).getTime();
+        const renewalMs = Number(task.renewal_hours) * 3600000;
+        if (msSince >= renewalMs) {
+          // Reset so user can redo
+          await supabase.from('user_tasks')
+            .update({ status: 'pending', started_at: null, completed_at: null })
+            .eq('id', existingTask.id);
+          // Continue with fresh pending state
+          existingTask.status = 'pending';
+          existingTask.started_at = null;
+          existingTask.completed_at = null;
+        } else {
+          const hoursLeft = Math.ceil((renewalMs - msSince) / 3600000);
+          return new Response(
+            JSON.stringify({ error: `Task renews in ${hoursLeft}h`, renewable: true, renewsInHours: hoursLeft }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        return new Response(
+          JSON.stringify({ error: 'Task already completed', userTask: existingTask }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ── Global max_completions check (for non-code_api types, code_api does it internally) ──
+    if (task.type !== 'code_api' && task.max_completions && task.max_completions > 0) {
+      const { count: doneCount } = await supabase
+        .from('user_tasks')
+        .select('id', { count: 'exact', head: true })
+        .eq('task_id', task.id)
+        .eq('status', 'completed');
+      if ((doneCount || 0) >= task.max_completions) {
+        return new Response(
+          JSON.stringify({ error: 'This task has reached its completion limit.', limitReached: true }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Handle based on task type

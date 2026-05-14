@@ -32,6 +32,7 @@ interface ButtonBindings {
   home_checkin: string;
   spin_button: string;
   promo_redeem: string;
+  social_link_start: string;
 }
 
 const defaultPlatform: PlatformConfig = {
@@ -55,6 +56,7 @@ const BUTTON_SLOTS = [
   { key: "home_checkin", label: "Home Page — check-in bonus button" },
   { key: "spin_button", label: "Spin Wheel — show ad before spin" },
   { key: "promo_redeem", label: "Promo Code — show ad before redeem" },
+  { key: "social_link_start", label: "Social Tasks — show ad before opening link" },
 ];
 
 export function AdminAdsView() {
@@ -85,6 +87,7 @@ export function AdminAdsView() {
     home_checkin: "none",
     spin_button: "none",
     promo_redeem: "none",
+    social_link_start: "none",
   });
 
   const [savingKey, setSavingKey] = useState<string | null>(null);

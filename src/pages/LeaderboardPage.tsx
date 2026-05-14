@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
-import { useLeaderboard, usePlatformStats, useReferrals, useUserTasks, useRedeemPromoCode, useAppSettings } from "@/hooks/useSupabaseData";
+import { useLeaderboard, usePlatformStats, useReferrals, useUserTasks, useRedeemPromoCode, useAppSettings, useBalances } from "@/hooks/useSupabaseData";
 import { shareUrl as tgShareUrl } from "@/lib/telegram";
 import { useAdTrigger } from "@/hooks/useAdTrigger";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -19,7 +19,7 @@ export function LeaderboardPage() {
   const { t } = useLanguage();
   const { user } = useUser();
   const { toast } = useToast();
-  const [rankType, setRankType] = useState<"tasks" | "referrals">("tasks");
+  const [rankType, setRankType] = useState<"tasks" | "referrals" | "balance">("tasks");
   const [promoCode, setPromoCode] = useState("");
   const redeemPromo = useRedeemPromoCode();
   const { triggerAd, isConfigured } = useAdTrigger();
@@ -30,9 +30,11 @@ export function LeaderboardPage() {
   const { data: referralData } = useReferrals(user?.telegram_id);
   const { data: userTasks } = useUserTasks(user?.telegram_id);
   const { data: settings } = useAppSettings();
+  const { data: userBalances } = useBalances(user?.telegram_id);
 
   const myRank = leaderboard?.findIndex((e) => e.userId === user?.telegram_id) ?? -1;
   const myScore = myRank >= 0 ? leaderboard![myRank].score : 0;
+  const myUsdBalance = (userBalances || []).reduce((s: number, b: any) => s + Number(b.amount) * Number(b.currencies?.exchange_rate || 1), 0);
 
   const botUsername = ((settings?.bot_username as string) || "").replace(/^@/, "").trim();
   const referralLink = botUsername && user?.telegram_id
@@ -119,6 +121,33 @@ export function LeaderboardPage() {
         </div>
       </motion.div>
 
+      {/* Wallet Balance Card */}
+      {(userBalances || []).filter((b: any) => Number(b.amount) > 0).length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-4 border-accent/20">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center">
+              <span className="text-accent text-sm">💰</span>
+            </div>
+            <h3 className="font-semibold text-sm">Your Wallet</h3>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {(userBalances || []).filter((b: any) => Number(b.amount) > 0).map((b: any) => (
+              <div key={b.id} className="flex items-center gap-1.5 bg-secondary rounded-lg px-2.5 py-1.5">
+                {b.currencies?.icon_url ? (
+                  <img src={b.currencies.icon_url} alt="" className="w-3 h-3 rounded-full" />
+                ) : (
+                  <span className="text-[10px]">🪙</span>
+                )}
+                <span className="text-xs font-semibold tabular-nums">
+                  {Number(b.amount).toFixed(b.currencies?.decimals ?? 2)}
+                </span>
+                <span className="text-[10px] text-muted-foreground">{b.currencies?.symbol}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       {/* Invite Card */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card rounded-2xl p-4 border-primary/20">
         <div className="flex items-center gap-2 mb-2">
@@ -163,6 +192,9 @@ export function LeaderboardPage() {
         <button onClick={() => setRankType("referrals")} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${rankType === "referrals" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>
           {t("referralRanking")}
         </button>
+        <button onClick={() => setRankType("balance")} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${rankType === "balance" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}>
+          Balance
+        </button>
       </div>
 
       {/* Your Rank */}
@@ -173,8 +205,8 @@ export function LeaderboardPage() {
           <p className="font-bold">#{myRank >= 0 ? myRank + 1 : "—"}</p>
         </div>
         <div className="text-end">
-          <p className="text-xs text-muted-foreground">{rankType === "tasks" ? t("tasksCompleted") : t("referralRanking")}</p>
-          <p className="font-bold text-accent tabular-nums">{myScore}</p>
+          <p className="text-xs text-muted-foreground">{rankType === "tasks" ? t("tasksCompleted") : rankType === "referrals" ? t("referralRanking") : "USDT Balance"}</p>
+          <p className="font-bold text-accent tabular-nums">{rankType === "balance" ? `$${myUsdBalance.toFixed(3)}` : myScore}</p>
         </div>
       </motion.div>
 
@@ -198,7 +230,7 @@ export function LeaderboardPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{entry.name}</p>
               </div>
-              <p className="text-xs font-semibold text-accent tabular-nums">{entry.score}</p>
+              <p className="text-xs font-semibold text-accent tabular-nums">{rankType === "balance" ? `$${Number(entry.score).toFixed(3)}` : entry.score}</p>
             </motion.div>
           ))}
           {(!leaderboard || leaderboard.length === 0) && (

@@ -43,6 +43,7 @@ interface TaskForm {
   success_value: string;
   max_completions: number | null;
   user_limit: number;
+  renewal_hours: number | null;
   publisher_article_id: string | null;
 }
 
@@ -57,7 +58,7 @@ const empty: TaskForm = {
   verify_headers: "{}",
   body_template: '{\n  "token": "{{token}}",\n  "code": "{{code}}"\n}',
   success_key: "success", success_value: "true",
-  max_completions: null, user_limit: 1,
+  max_completions: null, user_limit: 1, renewal_hours: null,
   publisher_article_id: null,
 };
 
@@ -102,6 +103,7 @@ export function AdminTasksView() {
       sort_order: editing.sort_order,
       icon_url: editing.icon_url || null,
       metadata: editing.metadata,
+      renewal_hours: editing.renewal_hours || null,
     };
 
     if (editing.type === "code_api") {
@@ -121,6 +123,7 @@ export function AdminTasksView() {
       payload.success_key = editing.success_key.trim() || "success";
       payload.success_value = editing.success_value.trim() || "true";
       payload.max_completions = editing.max_completions || null;
+      payload.renewal_hours = editing.renewal_hours || null;
       payload.user_limit = editing.user_limit ?? 1;
       payload.publisher_article_id = editing.publisher_article_id || null;
     } else {
@@ -207,6 +210,7 @@ export function AdminTasksView() {
       success_value: t.success_value ?? "true",
       max_completions: t.max_completions ?? null,
       user_limit: t.user_limit ?? 1,
+      renewal_hours: t.renewal_hours ?? null,
       publisher_article_id: t.publisher_article_id || null,
       notify_telegram: t.notify_telegram ?? true,
       featured_user_id: t.featured_user_id ?? null,
@@ -598,6 +602,34 @@ export function AdminTasksView() {
               </div>
             </div>
           )}
+
+          {/* Renewal & Limits (all types) */}
+          <div className="border-t border-border/40 pt-2 mt-1 space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground">Renewal & Limits</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground">Max completions (blank = ∞)</label>
+                <Input
+                  type="number"
+                  placeholder="Unlimited"
+                  value={editing.max_completions ?? ""}
+                  onChange={(e) => setEditing({ ...editing, max_completions: e.target.value === "" ? null : +e.target.value })}
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Renewal hours (blank = one-time)</label>
+                <Input
+                  type="number"
+                  placeholder="No renewal"
+                  value={editing.renewal_hours ?? ""}
+                  onChange={(e) => setEditing({ ...editing, renewal_hours: e.target.value === "" ? null : +e.target.value })}
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+            <p className="text-[9px] text-muted-foreground">Renewal = hours until user can redo this task. Leave blank for one-time tasks.</p>
+          </div>
 
           {/* Social link metadata */}
           {editing.type === "social_link" && (
