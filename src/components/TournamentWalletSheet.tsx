@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useAppSettings } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
-import { Copy, Check, ArrowDownCircle, ArrowUpCircle, X, Clock, Send } from "lucide-react";
+import { Copy, Check, ArrowDownCircle, ArrowUpCircle, X, Clock, Send, RefreshCw } from "lucide-react";
 import { hapticImpact } from "@/lib/telegram";
 
 const USDT_ICON = "https://cryptologos.cc/logos/tether-usdt-logo.svg?v=040";
@@ -19,6 +19,7 @@ interface PaymentMethod {
   type?: "crypto" | "local";
   rate_usd?: number;
   instructions?: string;
+  countdown_minutes?: number;
 }
 
 export function TournamentWalletSheet({
@@ -39,12 +40,19 @@ export function TournamentWalletSheet({
   const [withdrawAddr, setWithdrawAddr]   = useState("");
   const [withdrawAmt, setWithdrawAmt]     = useState("");
 
-  // Local currency deposit state
-  const [localAmt,    setLocalAmt]    = useState("");
-  const [localNote,   setLocalNote]   = useState("");
-  const [submitting,  setSubmitting]  = useState(false);
-  const [submitted,   setSubmitted]   = useState(false);
-  const [submitErr,   setSubmitErr]   = useState<string | null>(null);
+  const [localAmt,      setLocalAmt]      = useState("");
+  const [senderAccount, setSenderAccount] = useState("");
+  const [localNote,     setLocalNote]     = useState("");
+  const [submitting,    setSubmitting]    = useState(false);
+  const [submitted,     setSubmitted]     = useState(false);
+  const [submitErr,     setSubmitErr]     = useState<string | null>(null);
+  const [lastDepositId, setLastDepositId] = useState<string | null>(null);
+
+  const [countdown, setCountdown] = useState(0);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [depositStatus, setDepositStatus]   = useState<string | null>(null);
 
   const depositEnabled  = settings?.tournament_deposit_enabled  !== false;
   const withdrawEnabled = settings?.tournament_withdraw_enabled !== false;
@@ -53,7 +61,6 @@ export function TournamentWalletSheet({
   const withdrawNote    = (settings?.tournament_withdraw_note as string) || "";
   const exchangeRate    = Number((settings as any)?.tournament_exchange_rate ?? 1);
 
-  // All enabled payment methods (crypto + local)
   const rawMethods = (settings as any)?.tournament_payment_methods;
   const paymentMethods: PaymentMethod[] = Array.isArray(rawMethods) && rawMethods.length > 0
     ? rawMethods.filter((m: PaymentMethod) => m.enabled && (m.address || m.instructions))
@@ -66,9 +73,37 @@ export function TournamentWalletSheet({
 
   const activeMethodId = selectedMethodId || paymentMethods[0]?.id || null;
   const activeMethod   = paymentMethods.find((m) => m.id === activeMethodId) || paymentMethods[0] || null;
+  const cryptoMethods  = paymentMethods.filter((m) => (m.type ?? "crypto") === "crypto");
 
-  const cryptoMethods = paymentMethods.filter((m) => (m.type ?? "crypto") === "crypto");
-  const localMethods  = paymentMethods.filter((m) => m.type === "local");
+  const { data: historyDeposits = [], refetch: refetchHistory } = useQuery({
+    queryKey: ["my_tournament_deposits", userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data } = await supabase
+        .from("tournament_deposits")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      return (data || []) as any[];
+    },
+    enabled: !!userId && (tab === "history" || submitted),
+  });
+
+  useEffect(() => {
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, []);
+
+  const startCountdown = (minutes: number) => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    setCountdown(minutes * 60);
+    countdownRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) { clearInterval(countdownRef.current!); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   const copyText = (text: string, id: string) => {
     if (!text) return;
@@ -87,7 +122,11 @@ export function TournamentWalletSheet({
     try {
       const rateUsd = activeMethod.rate_usd ?? 1;
       const amtUsd  = rateUsd > 0 ? amt / rateUsd : 0;
-      const { error } = await supabase.from("tournament_deposits").insert({
+      const noteArr = [
+        senderAccount.trim() ? `Sender: ${senderAccount.trim()}` : "",
+        localNote.trim()     ? `TxID: ${localNote.trim()}` : "",
+      ].filter(Boolean);
+      const { data, error } = await supabase.from("tournament_deposits").insert({
         user_id:      userId,
         method_id:    activeMethod.id,
         method_name:  activeMethod.name,
@@ -95,15 +134,40 @@ export function TournamentWalletSheet({
         amount_local: amt,
         rate_usd:     rateUsd,
         amount_usd:   amtUsd,
-        user_note:    localNote.trim() || null,
+        user_note:    noteArr.join(" | ") || null,
         status:       "pending",
-      });
+      }).select("id").single();
       if (error) throw error;
+      setLastDepositId(data?.id || null);
       setSubmitted(true);
+      setDepositStatus("pending");
       hapticImpact("medium");
+      const mins = activeMethod.countdown_minutes ?? 15;
+      startCountdown(mins);
     } catch (e: any) {
       setSubmitErr(e.message);
     } finally { setSubmitting(false); }
+  };
+
+  const checkDepositStatus = async () => {
+    if (!lastDepositId && !userId) return;
+    setCheckingStatus(true);
+    try {
+      let q = supabase.from("tournament_deposits").select("status, admin_note");
+      if (lastDepositId) q = q.eq("id", lastDepositId);
+      else q = q.eq("user_id", userId!).order("created_at", { ascending: false }).limit(1);
+      const { data } = await q.maybeSingle();
+      if (data) {
+        setDepositStatus(data.status);
+        hapticImpact("light");
+      }
+    } finally { setCheckingStatus(false); }
+  };
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, "0");
+    const s = (secs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
   };
 
   const btnStyle = (active: boolean, color = "234,179,8") => ({
@@ -111,6 +175,12 @@ export function TournamentWalletSheet({
     border: `1px solid ${active ? `rgba(${color},0.4)` : "transparent"}`,
     color: active ? `rgb(${color})` : "rgba(255,255,255,0.4)",
   });
+
+  const statusColor = (s: string) =>
+    s === "approved" ? "34,197,94" : s === "rejected" ? "239,68,68" : "234,179,8";
+
+  const statusLabel = (s: string) =>
+    s === "approved" ? "✓ Approved" : s === "rejected" ? "✗ Rejected" : "⏳ Pending";
 
   return (
     <AnimatePresence>
@@ -137,7 +207,6 @@ export function TournamentWalletSheet({
               boxShadow: "0 -20px 60px rgba(0,0,0,0.5)",
             }}
           >
-            {/* drag handle */}
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-white/20" />
             </div>
@@ -174,7 +243,11 @@ export function TournamentWalletSheet({
                   { key: "withdraw", label: "Withdraw", icon: ArrowUpCircle },
                   { key: "history",  label: "History",  icon: Clock },
                 ] as const).map(({ key, label, icon: Icon }) => (
-                  <button key={key} onClick={() => { setTab(key); setSubmitted(false); setSubmitErr(null); }}
+                  <button key={key} onClick={() => {
+                    setTab(key);
+                    if (key === "history") refetchHistory();
+                    setSubmitted(false); setSubmitErr(null);
+                  }}
                     className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-semibold transition-all"
                     style={btnStyle(tab === key)}>
                     <Icon className="w-3.5 h-3.5" />{label}
@@ -191,13 +264,12 @@ export function TournamentWalletSheet({
                     <div className="py-10 text-center text-white/30 text-sm">No deposit methods configured yet</div>
                   ) : (
                     <>
-                      {/* Method tabs (show all enabled methods) */}
                       {paymentMethods.length > 1 && (
                         <div className="flex gap-1.5 overflow-x-auto pb-1">
                           {paymentMethods.map((m) => (
                             <button
                               key={m.id}
-                              onClick={() => { setSelectedMethodId(m.id); setSubmitted(false); setLocalAmt(""); setLocalNote(""); setSubmitErr(null); }}
+                              onClick={() => { setSelectedMethodId(m.id); setSubmitted(false); setLocalAmt(""); setSenderAccount(""); setLocalNote(""); setSubmitErr(null); setDepositStatus(null); }}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all"
                               style={btnStyle(activeMethodId === m.id, m.type === "local" ? "34,197,94" : "234,179,8")}
                             >
@@ -232,7 +304,13 @@ export function TournamentWalletSheet({
                           <div className="p-4 rounded-2xl space-y-3"
                             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
                             <p className="text-xs text-white/30 font-semibold uppercase tracking-wider">Wallet Address</p>
-                            <p className="text-sm text-white font-mono break-all leading-relaxed select-all">{activeMethod.address}</p>
+                            <div className="flex items-center gap-2">
+                              <input
+                                readOnly
+                                value={activeMethod.address}
+                                className="flex-1 bg-transparent text-sm text-white font-mono break-all outline-none select-all cursor-text"
+                              />
+                            </div>
                             <button
                               onClick={() => copyText(activeMethod.address, activeMethod.id)}
                               className="w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
@@ -261,37 +339,88 @@ export function TournamentWalletSheet({
                       {activeMethod && activeMethod.type === "local" && (
                         <div className="space-y-3">
                           {submitted ? (
-                            <div className="py-8 text-center space-y-3">
-                              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto"
-                                style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)" }}>
-                                <Check className="w-7 h-7 text-green-400" />
+                            <div className="space-y-3">
+                              {/* Status banner */}
+                              <div className="p-4 rounded-2xl text-center space-y-2"
+                                style={{ background: `rgba(${statusColor(depositStatus || "pending")},0.08)`, border: `1px solid rgba(${statusColor(depositStatus || "pending")},0.25)` }}>
+                                <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto"
+                                  style={{ background: `rgba(${statusColor(depositStatus || "pending")},0.15)` }}>
+                                  {depositStatus === "approved"
+                                    ? <Check className="w-6 h-6 text-green-400" />
+                                    : depositStatus === "rejected"
+                                    ? <X className="w-6 h-6 text-red-400" />
+                                    : <Clock className="w-6 h-6 text-yellow-400" />}
+                                </div>
+                                <p className="text-sm font-bold text-white">{statusLabel(depositStatus || "pending")}</p>
+                                <p className="text-xs text-white/40">
+                                  {depositStatus === "approved"
+                                    ? "Your deposit has been approved and credited to your wallet."
+                                    : depositStatus === "rejected"
+                                    ? "Your deposit was rejected. Please contact support."
+                                    : "Your deposit request is under review. It will be credited after admin approval."}
+                                </p>
                               </div>
-                              <p className="text-sm font-bold text-white">Deposit Request Submitted</p>
-                              <p className="text-xs text-white/40">
-                                Your deposit request is pending review. It will be credited after admin approval.
-                              </p>
+
+                              {/* Countdown */}
+                              {countdown > 0 && depositStatus === "pending" && (
+                                <div className="flex items-center justify-center gap-2 py-2 rounded-xl"
+                                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                                  <Clock className="w-4 h-4 text-white/40" />
+                                  <span className="text-sm font-mono text-white/60">
+                                    Expected confirmation in <strong className="text-white">{formatCountdown(countdown)}</strong>
+                                  </span>
+                                </div>
+                              )}
+
+                              {/* Check status button */}
                               <button
-                                onClick={() => { setSubmitted(false); setLocalAmt(""); setLocalNote(""); }}
-                                className="text-xs text-white/50 underline">
-                                Submit another
+                                onClick={checkDepositStatus}
+                                disabled={checkingStatus}
+                                className="w-full py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)" }}>
+                                <RefreshCw className={`w-4 h-4 ${checkingStatus ? "animate-spin" : ""}`} />
+                                {checkingStatus ? "Checking…" : "Check Deposit Status"}
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setSubmitted(false); setLocalAmt(""); setSenderAccount(""); setLocalNote("");
+                                  setDepositStatus(null); setCountdown(0);
+                                  if (countdownRef.current) clearInterval(countdownRef.current);
+                                }}
+                                className="w-full text-xs text-white/40 underline text-center py-1">
+                                Submit another deposit
                               </button>
                             </div>
                           ) : (
                             <>
                               {/* Payment details */}
-                              <div className="p-4 rounded-2xl space-y-2"
+                              <div className="p-4 rounded-2xl space-y-3"
                                 style={{ background: "rgba(34,197,94,0.05)", border: "1px solid rgba(34,197,94,0.2)" }}>
                                 <p className="text-xs text-green-400 font-semibold uppercase tracking-wider">{activeMethod.network}</p>
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="text-sm text-white font-mono break-all">{activeMethod.address}</p>
-                                  <button onClick={() => copyText(activeMethod.address, activeMethod.id + "_local")}
-                                    className="shrink-0 p-2 rounded-lg transition-all"
-                                    style={{ background: copiedId === activeMethod.id + "_local" ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.07)" }}>
-                                    {copiedId === activeMethod.id + "_local"
-                                      ? <Check className="w-4 h-4 text-green-400" />
-                                      : <Copy className="w-4 h-4 text-white/50" />}
-                                  </button>
+
+                                {/* Account number — readonly input + copy */}
+                                <div>
+                                  <p className="text-[10px] text-white/30 mb-1">Account Number / Details</p>
+                                  <div className="flex items-center gap-2 rounded-xl px-3 py-2"
+                                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                    <input
+                                      readOnly
+                                      value={activeMethod.address}
+                                      className="flex-1 bg-transparent text-sm text-white font-mono outline-none select-all cursor-text min-w-0 truncate"
+                                      onFocus={(e) => e.currentTarget.select()}
+                                    />
+                                    <button
+                                      onClick={() => copyText(activeMethod.address, activeMethod.id + "_local")}
+                                      className="shrink-0 p-1.5 rounded-lg transition-all"
+                                      style={{ background: copiedId === activeMethod.id + "_local" ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.07)" }}>
+                                      {copiedId === activeMethod.id + "_local"
+                                        ? <Check className="w-4 h-4 text-green-400" />
+                                        : <Copy className="w-4 h-4 text-white/50" />}
+                                    </button>
+                                  </div>
                                 </div>
+
                                 {activeMethod.rate_usd && activeMethod.rate_usd > 0 && (
                                   <p className="text-[11px] text-white/40">
                                     Rate: <strong className="text-white">1 USD = {activeMethod.rate_usd} {activeMethod.coin}</strong>
@@ -313,7 +442,7 @@ export function TournamentWalletSheet({
                                     min="0"
                                     value={localAmt}
                                     onChange={(e) => setLocalAmt(e.target.value)}
-                                    placeholder={`Amount in ${activeMethod.coin}…`}
+                                    placeholder={`Amount sent in ${activeMethod.coin}…`}
                                     className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all"
                                     style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
                                   />
@@ -322,12 +451,23 @@ export function TournamentWalletSheet({
                                       ≈ ${(Number(localAmt) / activeMethod.rate_usd).toFixed(2)} USD
                                     </p>
                                   )}
-                                  <textarea
-                                    rows={2}
+
+                                  {/* Sender account number */}
+                                  <input
+                                    type="text"
+                                    value={senderAccount}
+                                    onChange={(e) => setSenderAccount(e.target.value)}
+                                    placeholder="Your sender account / phone number…"
+                                    className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all"
+                                    style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+                                  />
+
+                                  <input
+                                    type="text"
                                     value={localNote}
                                     onChange={(e) => setLocalNote(e.target.value)}
-                                    placeholder="Transaction ID or note (optional)…"
-                                    className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none resize-none transition-all"
+                                    placeholder="Transaction ID (optional)…"
+                                    className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all"
                                     style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
                                   />
                                 </div>
@@ -433,7 +573,46 @@ export function TournamentWalletSheet({
 
               {/* ── HISTORY TAB ─────────────────────────────────────────── */}
               {tab === "history" && (
-                <DepositHistory userId={userId} />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-white/50 uppercase tracking-wider">Deposit History</p>
+                    <button onClick={() => refetchHistory()}
+                      className="p-1.5 rounded-lg text-white/40 hover:text-white/70 transition-all"
+                      style={{ background: "rgba(255,255,255,0.05)" }}>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {!userId ? (
+                    <div className="py-8 text-center text-white/30 text-sm">Sign in to view history</div>
+                  ) : historyDeposits.length === 0 ? (
+                    <div className="py-8 text-center text-white/30 text-sm">No deposits yet</div>
+                  ) : (
+                    historyDeposits.map((d: any) => (
+                      <div key={d.id} className="p-3 rounded-2xl space-y-1.5"
+                        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-white">
+                              {d.amount_local} {d.currency}
+                              {d.amount_usd ? <span className="text-white/40 font-normal text-xs"> ≈ ${Number(d.amount_usd).toFixed(2)}</span> : null}
+                            </p>
+                            <p className="text-[11px] text-white/40">via {d.method_name}</p>
+                            {d.user_note && <p className="text-[10px] text-white/30 truncate">{d.user_note}</p>}
+                          </div>
+                          <span className="text-[10px] px-2 py-1 rounded-full font-bold shrink-0"
+                            style={{ background: `rgba(${statusColor(d.status)},0.12)`, color: `rgb(${statusColor(d.status)})` }}>
+                            {statusLabel(d.status)}
+                          </span>
+                        </div>
+                        {d.admin_note && (
+                          <p className="text-[10px] text-white/40 italic">Admin: {d.admin_note}</p>
+                        )}
+                        <p className="text-[10px] text-white/25">{new Date(d.created_at).toLocaleString()}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
             </div>
           </motion.div>
@@ -442,49 +621,3 @@ export function TournamentWalletSheet({
     </AnimatePresence>
   );
 }
-
-/* ── Deposit history for the current user ── */
-function DepositHistory({ userId }: { userId?: string }) {
-  const { data: deposits, isLoading } = useQuery({ queryKey: ["user_deposits", userId], queryFn: async () => {
-    if (!userId) return [];
-    const { data } = await supabase
-      .from("tournament_deposits")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(30);
-    return (data || []) as any[];
-  }, enabled: !!userId });
-
-  if (!userId) return <div className="py-10 text-center text-white/30 text-sm">Sign in to view history</div>;
-  if (isLoading) return <div className="py-10 text-center text-white/30 text-sm">Loading…</div>;
-  if (!deposits?.length) return <div className="py-10 text-center text-white/30 text-sm">No deposit history yet.</div>;
-
-  return (
-    <div className="space-y-2">
-      {deposits.map((d: any) => (
-        <div key={d.id} className="p-3 rounded-2xl space-y-1"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white">
-                {d.amount_local} {d.currency}
-                {d.amount_usd && <span className="text-white/40 font-normal text-xs ms-1">≈ ${Number(d.amount_usd).toFixed(2)}</span>}
-              </p>
-              <p className="text-xs text-white/40">{d.method_name} · {new Date(d.created_at).toLocaleDateString()}</p>
-              {d.admin_note && <p className="text-[11px] text-yellow-400/70 mt-0.5">{d.admin_note}</p>}
-            </div>
-            <span className={`text-[9px] px-2 py-1 rounded-full font-bold shrink-0 ${
-              d.status === "approved" ? "bg-green-500/10 text-green-400" :
-              d.status === "rejected" ? "bg-red-500/10 text-red-400" :
-              "bg-yellow-500/10 text-yellow-400"
-            }`}>
-              {d.status === "approved" ? "✓ Approved" : d.status === "rejected" ? "✗ Rejected" : "⏳ Pending"}
-            </span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
