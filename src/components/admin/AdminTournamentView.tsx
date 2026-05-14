@@ -500,11 +500,11 @@ function TournamentWalletAdmin() {
       { key: "tournament_withdraw_enabled", value: form.withdraw_enabled },
       { key: "tournament_min_deposit",      value: Number(form.min_deposit) || 5 },
       { key: "tournament_min_withdraw",     value: Number(form.min_withdraw) || 5 },
-      { key: "tournament_withdraw_note",    value: form.withdraw_note.trim() || null },
+      { key: "tournament_withdraw_note",    value: form.withdraw_note.trim() || "" },
       { key: "tournament_exchange_rate",    value: Number(form.exchange_rate) || 1 },
       { key: "tournament_payment_methods",  value: methods },
-      { key: "tournament_deposit_address",  value: enabledMethod?.address || null },
-      { key: "tournament_deposit_network",  value: enabledMethod?.network || "TRC20" },
+      { key: "tournament_deposit_address",  value: enabledMethod?.address ?? "" },
+      { key: "tournament_deposit_network",  value: enabledMethod?.network ?? "TRC20" },
     ];
     const { error } = await supabase
       .from("app_settings")
@@ -644,7 +644,7 @@ function TournamentWalletAdmin() {
                     </div>
                   )}
 
-                  {m.enabled && m.type === "local" && (
+                  {m.type === "local" && (
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -669,6 +669,10 @@ function TournamentWalletAdmin() {
                       <div>
                         <label className="text-[10px] text-muted-foreground">Account Number / Details</label>
                         <input className={inp} placeholder="Bank account, phone number, etc." value={m.address} onChange={(e) => updateMethod(m.id, "address", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Countdown minutes (shown to user after submit)</label>
+                        <input className={inp} type="number" min="1" max="60" placeholder="e.g. 15" value={(m as any).countdown_minutes ?? 15} onChange={(e) => updateMethod(m.id, "countdown_minutes", Number(e.target.value))} />
                       </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground">Payment Instructions</label>
