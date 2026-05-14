@@ -12,6 +12,9 @@ const PUBLIC_SAFE_FIELDS = [
   "ai_topics", "ai_language",
   "site_title", "brand_color",
   "ad_head_html", "ad_top_html", "ad_middle_html", "ad_bottom_html", "ad_interstitial_html",
+  "publishers_enabled", "signup_enabled", "payouts_enabled", "articles_require_approval",
+  "revenue_per_visit", "min_payout", "signup_bonus",
+  "admin_only_articles",
 ];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,6 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case "settings": return handleSettings(req, res);
     case "stats":    return handleStats(req, res);
     case "preview":  return handlePreview(req, res);
+    case "articles": return handleArticles(req, res);
     default:         return res.status(404).json({ error: `Unknown admin action: ${action}` });
   }
 }
@@ -93,15 +97,9 @@ async function handleStats(req: VercelRequest, res: VercelResponse) {
   const [{ count: total }, { count: completed }, { count: today }, { count: articles }] =
     await Promise.all([
       supabase.from("task_code_sessions").select("id", { count: "exact", head: true }),
-      supabase
-        .from("task_code_sessions")
-        .select("id", { count: "exact", head: true })
-        .not("completed_at", "is", null),
-      supabase
-        .from("task_code_sessions")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", dayAgo),
-      supabase.from("shortlink_articles").select("id", { count: "exact", head: true }),
+      supabase.from("task_code_sessions").select("id", { count: "exact", head: true }).not("completed_at", "is", null),
+      supabase.from("task_code_sessions").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+      supabase.from("shortlink_pub_articles").select("id", { count: "exact", head: true }),
     ]);
 
   return res.status(200).json({
@@ -121,4 +119,86 @@ async function handlePreview(req: VercelRequest, res: VercelResponse) {
   const article = await generateArticleViaAI(topic);
   if (!article) return res.status(400).json({ error: "AI key not configured or call failed" });
   return res.status(200).json(article);
+}
+
+// -- articles (admin CRUD) ---------------------------------------------------
+function generateSlug(): string {
+  const alphabet = "abcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = crypto.randomBytes(10);
+  let out = "";
+  for (let i = 0; i < 10; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
+
+async function handleArticles(req: VercelRequest, res: VercelResponse) {
+  if (!(await requireAdmin(req, res))) return;
+
+  // GET — list all admin articles
+  if (req.method === "GET") {
+    const { data, error } = await supabase
+      .from("shortlink_pub_articles")
+      .select("id, slug, title, status, visit_count, created_at, cover_url, sections")
+      .is("publisher_id", null)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ articles: data || [] });
+  }
+
+  // POST — create article
+  if (req.method === "POST") {
+    const { title, cover_url, sections } = req.body || {};
+    if (!title || typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({ error: "title is required" });
+    }
+    const slug = generateSlug();
+    const { data, error } = await supabase
+      .from("shortlink_pub_articles")
+      .insert({
+        publisher_id: null,
+        slug,
+        title: title.trim(),
+        cover_url: cover_url || null,
+        sections: Array.isArray(sections) ? sections : [],
+        status: "approved",
+        source: "admin",
+      })
+      .select("id, slug, title, status, created_at")
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ article: data });
+  }
+
+  // PATCH — update article
+  if (req.method === "PATCH") {
+    const { id, title, cover_url, sections, status } = req.body || {};
+    if (!id) return res.status(400).json({ error: "id is required" });
+    const patch: any = { updated_at: new Date().toISOString() };
+    if (title !== undefined) patch.title = title;
+    if (cover_url !== undefined) patch.cover_url = cover_url || null;
+    if (sections !== undefined) patch.sections = sections;
+    if (status !== undefined) patch.status = status;
+    const { error } = await supabase
+      .from("shortlink_pub_articles")
+      .update(patch)
+      .eq("id", id)
+      .is("publisher_id", null);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ ok: true });
+  }
+
+  // DELETE
+  if (req.method === "DELETE") {
+    const id = (req.body || {}).id || req.query.id;
+    if (!id) return res.status(400).json({ error: "id is required" });
+    const { error } = await supabase
+      .from("shortlink_pub_articles")
+      .delete()
+      .eq("id", id)
+      .is("publisher_id", null);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ ok: true });
+  }
+
+  return res.status(405).json({ error: "Method not allowed" });
 }
