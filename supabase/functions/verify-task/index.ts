@@ -102,6 +102,8 @@ Deno.serve(async (req) => {
       return await handleCodeApi(supabase, userId, task, existingTask, action, code);
     } else if (task.type === 'submission') {
       return await handleSubmission(supabase, userId, task, existingTask, action, submissionData);
+    } else if (task.type === 'referral_earning') {
+      return await handleReferralEarning(supabase, userId, task, existingTask, action);
     }
 
     return new Response(
@@ -578,6 +580,80 @@ async function handleSubmission(
     JSON.stringify({ status: 'submitted', message: 'Your submission has been received and is under review.' }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+}
+
+async function handleReferralEarning(supabase: any, userId: string, task: any, existingTask: any, action: string) {
+  const metadata = task.metadata || {};
+  const minEarnings = Number(metadata.min_referral_earnings || 0);
+  const minReferrals = Number(metadata.min_referral_count || 0);
+  const earningCurrencyId: string | null = metadata.earning_currency_id || null;
+
+  // "start" — just register pending so user can track progress
+  if (action === 'start') {
+    if (!existingTask) {
+      await supabase.from('user_tasks').insert({
+        user_id: userId, task_id: task.id, status: 'pending', started_at: new Date().toISOString(),
+      });
+    }
+    return new Response(
+      JSON.stringify({ status: 'started', minEarnings, minReferrals, earningCurrencyId }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // "verify" — check referral earnings
+  // 1. Get all users this user referred
+  const { data: referrals } = await supabase
+    .from('referrals')
+    .select('invitee_id')
+    .eq('inviter_id', userId);
+
+  const referredIds: string[] = (referrals || []).map((r: any) => r.invitee_id);
+
+  // Check referral count
+  if (minReferrals > 0 && referredIds.length < minReferrals) {
+    return new Response(
+      JSON.stringify({
+        error: `You need ${minReferrals} referrals. You currently have ${referredIds.length}.`,
+        verified: false,
+        currentReferrals: referredIds.length,
+        requiredReferrals: minReferrals,
+      }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  if (minEarnings > 0 && referredIds.length > 0) {
+    // 2. Sum balances of all referred users
+    let balQuery = supabase
+      .from('balances')
+      .select('amount')
+      .in('user_id', referredIds);
+    if (earningCurrencyId) {
+      balQuery = balQuery.eq('currency_id', earningCurrencyId);
+    }
+    const { data: balRows } = await balQuery;
+    const totalEarnings = (balRows || []).reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0);
+
+    if (totalEarnings < minEarnings) {
+      return new Response(
+        JSON.stringify({
+          error: `Your referrals have earned ${totalEarnings.toFixed(2)} of the required ${minEarnings}.`,
+          verified: false,
+          currentEarnings: totalEarnings,
+          requiredEarnings: minEarnings,
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  } else if (minEarnings > 0 && referredIds.length === 0) {
+    return new Response(
+      JSON.stringify({ error: 'You have no referrals yet.', verified: false }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  return await completeTask(supabase, userId, task, existingTask);
 }
 
 function generateToken(): string {

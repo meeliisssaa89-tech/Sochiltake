@@ -410,7 +410,7 @@ interface PaymentMethod {
 function TournamentWalletAdmin() {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [walletTab, setWalletTab] = useState<"settings" | "deposits">("settings");
+  const [walletTab, setWalletTab] = useState<"settings" | "deposits" | "withdrawals">("settings");
 
   // ── Load settings using key-value pattern (fixes the column error) ──
   const { data: raw, refetch } = useQuery({
@@ -421,6 +421,12 @@ function TournamentWalletAdmin() {
       (data || []).forEach((row: any) => { s[row.key] = row.value; });
       return s;
     },
+  });
+
+  // ── Currencies for credit selection ──
+  const { data: currencies = [] } = useQuery({
+    queryKey: ["currencies"],
+    queryFn: async () => (await supabase.from("currencies").select("*")).data || [],
   });
 
   // ── Pending deposits ──
@@ -437,6 +443,20 @@ function TournamentWalletAdmin() {
     enabled: walletTab === "deposits",
   });
 
+  // ── Tournament withdrawals ──
+  const { data: tournWithdrawals = [], refetch: refetchTWithdrawals } = useQuery({
+    queryKey: ["admin_tournament_withdrawals"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("tournament_withdrawals")
+        .select("*, users:user_id(first_name, username, telegram_id), currencies:currency_id(symbol, name)")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      return (data || []) as any[];
+    },
+    enabled: walletTab === "withdrawals",
+  });
+
   const [form, setForm] = useState({
     deposit_enabled: false,
     withdraw_enabled: false,
@@ -444,6 +464,7 @@ function TournamentWalletAdmin() {
     min_withdraw: "5",
     withdraw_note: "",
     exchange_rate: "1",
+    deposit_credit_currency_id: "",
   });
   const [methods, setMethods] = useState<PaymentMethod[]>(DEFAULT_PAYMENT_METHODS.map((m) => ({ ...m })));
   const [formLoaded, setFormLoaded] = useState(false);
@@ -457,6 +478,7 @@ function TournamentWalletAdmin() {
         min_withdraw:     String(raw.tournament_min_withdraw ?? 5),
         withdraw_note:    raw.tournament_withdraw_note ?? "",
         exchange_rate:    String(raw.tournament_exchange_rate ?? 1),
+        deposit_credit_currency_id: raw.tournament_deposit_credit_currency_id || "",
       });
       const savedMethods = raw.tournament_payment_methods;
       if (Array.isArray(savedMethods) && savedMethods.length > 0) {
@@ -505,6 +527,7 @@ function TournamentWalletAdmin() {
       { key: "tournament_payment_methods",  value: methods },
       { key: "tournament_deposit_address",  value: enabledMethod?.address ?? "" },
       { key: "tournament_deposit_network",  value: enabledMethod?.network ?? "TRC20" },
+      { key: "tournament_deposit_credit_currency_id", value: form.deposit_credit_currency_id || null },
     ];
     const { error } = await supabase
       .from("app_settings")
@@ -514,15 +537,66 @@ function TournamentWalletAdmin() {
     setSaving(false);
   };
 
-  const reviewDeposit = async (id: string, status: "approved" | "rejected", note?: string) => {
+  const reviewDeposit = async (deposit: any, status: "approved" | "rejected", note?: string) => {
+    // ── Credit balance when approving ──
+    if (status === "approved" && deposit) {
+      const creditCurrencyId = raw?.tournament_deposit_credit_currency_id || form.deposit_credit_currency_id || null;
+      const amountUsd = Number(deposit.amount_usd || deposit.amount_local / (deposit.rate_usd || 1));
+      if (creditCurrencyId && amountUsd > 0) {
+        const { data: bal } = await supabase
+          .from("balances")
+          .select("amount")
+          .eq("user_id", deposit.user_id)
+          .eq("currency_id", creditCurrencyId)
+          .maybeSingle();
+        const newAmt = Number(bal?.amount || 0) + amountUsd;
+        const { error: balErr } = await supabase
+          .from("balances")
+          .upsert({ user_id: deposit.user_id, currency_id: creditCurrencyId, amount: newAmt }, { onConflict: "user_id,currency_id" });
+        if (balErr) {
+          toast({ title: "Balance update failed", description: balErr.message, variant: "destructive" });
+          return;
+        }
+      } else if (!creditCurrencyId) {
+        toast({ title: "⚠️ No credit currency set", description: "Go to Wallet → Settings → Deposit Credit Currency", variant: "destructive" });
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from("tournament_deposits")
       .update({ status, admin_note: note || null, reviewed_at: new Date().toISOString() })
-      .eq("id", id);
+      .eq("id", deposit.id);
     if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
     else {
-      toast({ title: status === "approved" ? "Deposit approved ✓" : "Deposit rejected" });
+      toast({ title: status === "approved" ? "Deposit approved ✓ — balance credited" : "Deposit rejected" });
       refetchDeposits();
+    }
+  };
+
+  const reviewTWithdrawal = async (tw: any, status: "approved" | "rejected", note?: string) => {
+    // ── Refund balance if rejecting ──
+    if (status === "rejected" && tw.currency_id && tw.amount > 0) {
+      const { data: bal } = await supabase
+        .from("balances")
+        .select("amount")
+        .eq("user_id", tw.user_id)
+        .eq("currency_id", tw.currency_id)
+        .maybeSingle();
+      const newAmt = Number(bal?.amount || 0) + Number(tw.amount);
+      await supabase.from("balances").upsert(
+        { user_id: tw.user_id, currency_id: tw.currency_id, amount: newAmt },
+        { onConflict: "user_id,currency_id" }
+      );
+    }
+    const { error } = await supabase
+      .from("tournament_withdrawals")
+      .update({ status, admin_note: note || null, reviewed_at: new Date().toISOString() })
+      .eq("id", tw.id);
+    if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
+    else {
+      toast({ title: status === "approved" ? "Withdrawal approved ✓" : "Withdrawal rejected — balance refunded" });
+      refetchTWithdrawals();
     }
   };
 
@@ -532,10 +606,14 @@ function TournamentWalletAdmin() {
     <div className="space-y-3">
       {/* Sub-tabs */}
       <div className="glass-card rounded-xl p-2 flex gap-1">
-        {(["settings", "deposits"] as const).map((t) => (
-          <button key={t} onClick={() => setWalletTab(t)}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${walletTab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
-            {t === "deposits" ? "💰 Deposit Requests" : "⚙️ Settings"}
+        {([
+          { id: "settings",    label: "⚙️ Settings" },
+          { id: "deposits",    label: "💰 Deposits" },
+          { id: "withdrawals", label: "🏧 Withdrawals" },
+        ] as const).map(({ id, label }) => (
+          <button key={id} onClick={() => setWalletTab(id)}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all ${walletTab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
+            {label}
           </button>
         ))}
       </div>
@@ -685,10 +763,76 @@ function TournamentWalletAdmin() {
             </div>
           </div>
 
+          {/* Deposit Credit Currency */}
+          <div className="glass-card rounded-xl p-4 space-y-2">
+            <h3 className="text-sm font-bold flex items-center gap-2">💳 Deposit Credit Currency</h3>
+            <p className="text-[10px] text-muted-foreground">
+              عند الموافقة على طلب إيداع، سيُضاف مبلغ USD المعادل إلى هذه العملة في محفظة المستخدم.
+            </p>
+            <select
+              className={inp}
+              value={form.deposit_credit_currency_id}
+              onChange={(e) => setForm({ ...form, deposit_credit_currency_id: e.target.value })}
+            >
+              <option value="">— اختر العملة —</option>
+              {(currencies as any[]).map((cur: any) => (
+                <option key={cur.id} value={cur.id}>{cur.symbol} — {cur.name}</option>
+              ))}
+            </select>
+          </div>
+
           <Button size="sm" className="w-full gap-2" onClick={save} disabled={saving}>
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null} Save All Wallet Settings
           </Button>
         </>
+      )}
+
+      {/* ── WITHDRAWALS TAB ─────────────────────────────── */}
+      {walletTab === "withdrawals" && (
+        <div className="space-y-2">
+          {(tournWithdrawals as any[]).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-8">No withdrawal requests yet.</p>
+          ) : (
+            (tournWithdrawals as any[]).map((tw: any) => (
+              <div key={tw.id} className="glass-card rounded-xl p-3 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">
+                      {tw.amount} {tw.currencies?.symbol || ""} • {tw.method_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {tw.users?.first_name || "User"} {tw.users?.username ? `@${tw.users.username}` : ""}
+                    </p>
+                    {tw.wallet_address && <p className="text-[10px] text-muted-foreground font-mono break-all">{tw.wallet_address}</p>}
+                    <p className="text-[10px] text-muted-foreground">{new Date(tw.created_at).toLocaleString()}</p>
+                    {tw.admin_note && <p className="text-xs text-muted-foreground mt-1">Note: {tw.admin_note}</p>}
+                  </div>
+                  <span className={`text-[9px] px-2 py-1 rounded-full font-bold shrink-0 ${
+                    tw.status === "approved" ? "bg-green-500/10 text-green-400" :
+                    tw.status === "rejected" ? "bg-red-500/10 text-red-400" :
+                    "bg-yellow-500/10 text-yellow-400"
+                  }`}>
+                    {tw.status === "approved" ? "✓ Approved" : tw.status === "rejected" ? "✗ Rejected" : "⏳ Pending"}
+                  </span>
+                </div>
+                {tw.status === "pending" && (
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => reviewTWithdrawal(tw, "approved")}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-semibold bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-all">
+                      <CheckCircle2 className="w-3 h-3" /> Approve
+                    </button>
+                    <button
+                      onClick={() => { const note = prompt("Rejection reason:") || ""; reviewTWithdrawal(tw, "rejected", note); }}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-semibold bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all">
+                      <XCircle className="w-3 h-3" /> Reject
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       )}
 
       {/* ── DEPOSITS TAB ─────────────────────────────── */}
@@ -722,14 +866,14 @@ function TournamentWalletAdmin() {
                 {d.status === "pending" && (
                   <div className="flex gap-1.5">
                     <button
-                      onClick={() => reviewDeposit(d.id, "approved")}
+                      onClick={() => reviewDeposit(d, "approved")}
                       className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-semibold bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-all">
                       <CheckCircle2 className="w-3 h-3" /> Approve
                     </button>
                     <button
                       onClick={() => {
                         const note = prompt("Rejection reason (optional):") || "";
-                        reviewDeposit(d.id, "rejected", note);
+                        reviewDeposit(d, "rejected", note);
                       }}
                       className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-semibold bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all">
                       <XCircle className="w-3 h-3" /> Reject

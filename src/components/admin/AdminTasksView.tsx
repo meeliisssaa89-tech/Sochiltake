@@ -22,7 +22,7 @@ interface TaskForm {
   title_ar: string;
   description_en: string;
   description_ar: string;
-  type: "telegram_join" | "watch_ad" | "social_link" | "code_api" | "submission";
+  type: "telegram_join" | "watch_ad" | "social_link" | "code_api" | "submission" | "referral_earning";
   reward_amount: number;
   reward_currency_id: string | null;
   extra_rewards: Array<{ currency_id: string; amount: number }>;
@@ -300,6 +300,7 @@ export function AdminTasksView() {
                   <SelectItem value="watch_ad">Watch Ad</SelectItem>
                   <SelectItem value="code_api">Code Verification (External API)</SelectItem>
                   <SelectItem value="submission">Submission (Manual Review)</SelectItem>
+                  <SelectItem value="referral_earning">Referral Earnings Task</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -630,6 +631,51 @@ export function AdminTasksView() {
             </div>
             <p className="text-[9px] text-muted-foreground">Renewal = hours until user can redo this task. Leave blank for one-time tasks.</p>
           </div>
+
+          {/* Referral Earning metadata */}
+          {editing.type === "referral_earning" && (
+            <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
+              <p className="text-[10px] font-medium text-primary">🤝 Referral Earnings Task</p>
+              <p className="text-[10px] text-muted-foreground">
+                يُكمل المستخدم هذه المهمة عندما يكسب المدعوون منه مبلغاً معيّناً من العملة. محدّد الحد الأدنى أدناه.
+              </p>
+              <div>
+                <label className="text-[10px] text-muted-foreground">الحد الأدنى لإجمالي أرباح المدعوين</label>
+                <Input
+                  type="number"
+                  value={editing.metadata?.min_referral_earnings ?? 100}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, min_referral_earnings: +e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="e.g. 100"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">العملة المُراد احتساب الأرباح بها</label>
+                <Select
+                  value={editing.metadata?.earning_currency_id || "any"}
+                  onValueChange={(v) => setEditing({ ...editing, metadata: { ...editing.metadata, earning_currency_id: v === "any" ? null : v } })}
+                >
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">— أي عملة (مجموع الكل) —</SelectItem>
+                    {(currencies || []).map((c: any) => (
+                      <SelectItem key={c.id} value={c.id}>{c.symbol} ({c.name})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">الحد الأدنى لعدد المدعوين (اختياري)</label>
+                <Input
+                  type="number"
+                  value={editing.metadata?.min_referral_count ?? ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, min_referral_count: e.target.value === "" ? null : +e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="e.g. 5 (اتركه فارغاً لعدم الاشتراط)"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Social link metadata */}
           {editing.type === "social_link" && (
