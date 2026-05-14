@@ -86,4 +86,10 @@ export const api = {
     }),
 
   adminStats: () => request<any>("/api/admin/stats"),
+
+  adminArticles: (action: "list" | "create" | "update" | "delete", body?: any) =>
+    request<any>(`/api/admin/articles`, {
+      method: action === "list" ? "GET" : action === "delete" ? "DELETE" : action === "update" ? "PATCH" : "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
 };
