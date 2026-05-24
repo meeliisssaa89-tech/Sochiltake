@@ -470,6 +470,59 @@ export function AdminTasksView() {
                   placeholder="e.g. Upload a screenshot of your completed action"
                 />
               </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">App / Redirect Link (optional — shown as a separate button)</label>
+                <Input
+                  value={editing.metadata?.app_link || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, app_link: e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="https://t.me/YourBot or https://yourapp.com"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">App Button Label (e.g. "Download App")</label>
+                <Input
+                  value={editing.metadata?.app_link_label || ""}
+                  onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, app_link_label: e.target.value } })}
+                  className="h-8 text-xs"
+                  placeholder="Open App"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Timer (seconds, 0 = no timer)</label>
+                  <Input
+                    type="number"
+                    value={editing.metadata?.task_duration_seconds || 0}
+                    onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, task_duration_seconds: +e.target.value || 0 } })}
+                    className="h-8 text-xs"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Max images (for photo type)</label>
+                  <Input
+                    type="number"
+                    value={editing.metadata?.max_images || 1}
+                    onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, max_images: +e.target.value || 1 } })}
+                    className="h-8 text-xs"
+                    placeholder="1"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Description Images (one URL per line — shown in task sheet)</label>
+                <Textarea
+                  value={(editing.metadata?.description_images || []).join("\n")}
+                  onChange={(e) => {
+                    const lines = e.target.value.split("\n").map((l: string) => l.trim()).filter(Boolean);
+                    setEditing({ ...editing, metadata: { ...editing.metadata, description_images: lines } });
+                  }}
+                  rows={3}
+                  className="text-xs"
+                  placeholder={"https://cdn.example.com/step1.png\nhttps://cdn.example.com/step2.png"}
+                />
+              </div>
             </div>
           )}
 

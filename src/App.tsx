@@ -9,6 +9,7 @@ import Index from "./pages/Index.tsx";
 import { AdminPanel } from "./pages/AdminPanel.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import { AdsSdkInjector } from "./components/AdsSdkInjector";
+import { PopupTaskModal } from "./components/PopupTaskModal";
 import { ADMIN_PATH } from "./lib/adminAuth";
 
 const queryClient = new QueryClient();
@@ -21,6 +22,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <AdsSdkInjector />
+          <PopupTaskModal />
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />

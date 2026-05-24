@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
@@ -72,9 +72,31 @@ export function TaskSheet({
   const [submitting, setSubmitting] = useState(false);
   const [submissionText, setSubmissionText] = useState("");
   const [submissionEmail, setSubmissionEmail] = useState("");
-  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
-  const [submissionPreview, setSubmissionPreview] = useState<string | null>(null);
+  const [submissionFiles, setSubmissionFiles] = useState<File[]>([]);
+  const [submissionPreviews, setSubmissionPreviews] = useState<string[]>([]);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open || !task) return;
+    setSubmissionFiles([]);
+    setSubmissionPreviews([]);
+    setSubmissionText("");
+    setSubmissionEmail("");
+    const duration = task.metadata?.task_duration_seconds;
+    if (duration && task.type === "submission") {
+      setTimeLeft(Number(duration));
+      const interval = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev === null || prev <= 0) { clearInterval(interval); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setTimeLeft(null);
+    }
+  }, [open, task?.id]);
 
   if (!task) return null;
 
@@ -93,21 +115,35 @@ export function TaskSheet({
   const SubIcon = submissionIcons[submissionType] || FileText;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setSubmissionFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setSubmissionPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const maxImages = task?.metadata?.max_images ? Number(task.metadata.max_images) : 5;
+    const combined = [...submissionFiles, ...files].slice(0, maxImages);
+    setSubmissionFiles(combined);
+    Promise.all(
+      combined.map(
+        (f) =>
+          new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve(ev.target?.result as string);
+            reader.readAsDataURL(f);
+          })
+      )
+    ).then(setSubmissionPreviews);
     e.target.value = "";
+  };
+
+  const removeFile = (idx: number) => {
+    setSubmissionFiles((prev) => prev.filter((_, i) => i !== idx));
+    setSubmissionPreviews((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleSubmit = async () => {
     if (!user?.telegram_id || !task) return;
 
     if (submissionType === "photo" || submissionType === "id_document") {
-      if (!submissionFile) {
-        toast({ title: t("error"), description: "Please upload a file first", variant: "destructive" });
+      if (!submissionFiles.length) {
+        toast({ title: t("error"), description: "Please upload at least one photo", variant: "destructive" });
         return;
       }
     }
@@ -119,18 +155,24 @@ export function TaskSheet({
       toast({ title: t("error"), description: "Please enter your submission", variant: "destructive" });
       return;
     }
+    if (timeLeft !== null && timeLeft > 0) {
+      toast({ title: t("error"), description: `Please wait ${timeLeft}s before submitting`, variant: "destructive" });
+      return;
+    }
 
     setSubmitting(true);
     try {
-      let submissionUrl = "";
-      if ((submissionType === "photo" || submissionType === "id_document") && submissionFile) {
-        const path = `task-submissions/${user.telegram_id}/${task.id}-${Date.now()}`;
-        const { data, error } = await supabase.storage
-          .from("task-submissions")
-          .upload(path, submissionFile, { upsert: true });
-        if (error) throw new Error("Upload failed: " + error.message);
-        const { data: urlData } = supabase.storage.from("task-submissions").getPublicUrl(data.path);
-        submissionUrl = urlData.publicUrl;
+      const submissionUrls: string[] = [];
+      if ((submissionType === "photo" || submissionType === "id_document") && submissionFiles.length > 0) {
+        for (const file of submissionFiles) {
+          const path = `task-submissions/${user.telegram_id}/${task.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+          const { data, error } = await supabase.storage
+            .from("task-submissions")
+            .upload(path, file, { upsert: true });
+          if (error) throw new Error("Upload failed: " + error.message);
+          const { data: urlData } = supabase.storage.from("task-submissions").getPublicUrl(data.path);
+          submissionUrls.push(urlData.publicUrl);
+        }
       }
 
       await verifyMutation.mutateAsync({
@@ -138,7 +180,8 @@ export function TaskSheet({
         taskId: task.id,
         action: "submit",
         submissionData: {
-          submission_url: submissionUrl || undefined,
+          submission_url: submissionUrls[0] || undefined,
+          submission_images: submissionUrls.length > 1 ? submissionUrls : undefined,
           submission_text: submissionText || undefined,
           submission_email: submissionEmail || undefined,
         },
@@ -240,6 +283,21 @@ export function TaskSheet({
                 </div>
               )}
 
+              {/* Description Images */}
+              {Array.isArray(task.metadata?.description_images) && task.metadata.description_images.length > 0 && (
+                <div className="space-y-2">
+                  {task.metadata.description_images.map((url: string, i: number) => (
+                    <img
+                      key={i}
+                      src={url}
+                      alt=""
+                      className="w-full rounded-2xl object-cover"
+                      style={{ maxHeight: 220 }}
+                    />
+                  ))}
+                </div>
+              )}
+
               {/* Rewards */}
               {(task.reward_amount > 0 || task.xp_reward > 0 || (task.extra_rewards?.length > 0)) && (
                 <div
@@ -318,7 +376,50 @@ export function TaskSheet({
               {/* ── Submission form ── */}
               {!isCompleted && !isPending && task.type === "submission" && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2 mb-2">
+                  {/* App Link Button */}
+                  {task.metadata?.app_link && (
+                    <a
+                      href={task.metadata.app_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all"
+                      style={{
+                        background: "rgba(59,130,246,0.15)",
+                        border: "1px solid rgba(59,130,246,0.35)",
+                        color: "rgb(147,197,253)",
+                        textDecoration: "none",
+                      }}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      {task.metadata.app_link_label || "Open App"}
+                    </a>
+                  )}
+
+                  {/* Countdown Timer */}
+                  {timeLeft !== null && (
+                    <div
+                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl"
+                      style={{
+                        background: timeLeft === 0 ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)",
+                        border: `1px solid ${timeLeft === 0 ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.3)"}`,
+                      }}
+                    >
+                      <Clock
+                        className="w-4 h-4"
+                        style={{ color: timeLeft === 0 ? "rgb(74,222,128)" : "rgb(251,191,36)" }}
+                      />
+                      <span
+                        className="text-sm font-bold"
+                        style={{ color: timeLeft === 0 ? "rgb(74,222,128)" : "rgb(251,191,36)" }}
+                      >
+                        {timeLeft === 0
+                          ? "Ready to submit!"
+                          : `Wait ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, "0")}`}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 mb-1">
                     <SubIcon className="w-4 h-4 text-purple-400" />
                     <p className="text-sm font-semibold text-white/80">{submissionLabel}</p>
                   </div>
@@ -329,22 +430,36 @@ export function TaskSheet({
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
                         onChange={handleFileSelect}
                       />
-                      {submissionPreview ? (
-                        <div className="relative">
-                          <img
-                            src={submissionPreview}
-                            alt="Preview"
-                            className="w-full h-48 object-cover rounded-2xl"
-                          />
+                      {submissionPreviews.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            {submissionPreviews.map((preview, idx) => (
+                              <div key={idx} className="relative">
+                                <img
+                                  src={preview}
+                                  alt="Preview"
+                                  className="w-full h-32 object-cover rounded-xl"
+                                />
+                                <button
+                                  onClick={() => removeFile(idx)}
+                                  className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center"
+                                  style={{ background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.2)" }}
+                                >
+                                  <X className="w-3 h-3 text-white" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                           <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="absolute bottom-2 right-2 px-3 py-1.5 rounded-xl text-xs font-semibold"
-                            style={{ background: "rgba(0,0,0,0.7)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)" }}
+                            className="w-full py-2 rounded-xl text-xs font-medium text-white/50 transition-all"
+                            style={{ background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.15)" }}
                           >
-                            Change
+                            + Add more photos
                           </button>
                         </div>
                       ) : (
@@ -357,7 +472,12 @@ export function TaskSheet({
                           }}
                         >
                           <Camera className="w-8 h-8 text-purple-400/60" />
-                          <p className="text-sm text-white/40">Tap to select {submissionType === "id_document" ? "document" : "photo"}</p>
+                          <p className="text-sm text-white/40">
+                            Tap to upload {submissionType === "id_document" ? "document" : "photos"}
+                          </p>
+                          <p className="text-[10px] text-white/25">
+                            Up to {task.metadata?.max_images || 5} images
+                          </p>
                         </button>
                       )}
                     </div>
@@ -387,7 +507,7 @@ export function TaskSheet({
 
                   <button
                     onClick={handleSubmit}
-                    disabled={submitting || verifyMutation.isPending}
+                    disabled={submitting || verifyMutation.isPending || (timeLeft !== null && timeLeft > 0)}
                     className="w-full py-3.5 rounded-2xl text-sm font-bold transition-all disabled:opacity-40 flex items-center justify-center gap-2"
                     style={{
                       background: "rgba(139,92,246,0.2)",

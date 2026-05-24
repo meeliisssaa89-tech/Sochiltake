@@ -61,7 +61,7 @@ export function ActivityPage() {
   const { t, language } = useLanguage();
   const { user } = useUser();
   const { toast } = useToast();
-  const [tab, setTab] = useState<"achievements" | "feed">("achievements");
+  const [tab, setTab] = useState<"achievements" | "feed" | "referrals">("achievements");
 
   const { data: userTasks }    = useUserTasks(user?.telegram_id);
   const { data: referralData } = useReferrals(user?.telegram_id);
@@ -102,34 +102,33 @@ export function ActivityPage() {
       if (!user?.telegram_id) return 0;
       const { data: refs } = await supabase
         .from("referrals")
-        .select("referee_id")
-        .eq("referrer_id", user.telegram_id);
+        .select("invitee_id")
+        .eq("inviter_id", user.telegram_id);
       if (!refs || refs.length === 0) return 0;
-      const refereeIds = refs.map((r) => r.referee_id);
+      const inviteeIds = refs.map((r: any) => r.invitee_id);
       const { count } = await supabase
         .from("ad_watches")
         .select("id", { count: "exact", head: true })
-        .in("user_id", refereeIds);
+        .in("user_id", inviteeIds);
       return count || 0;
     },
     enabled: !!user?.telegram_id,
   });
 
-  // Referrals' total earnings (count of balance credit events / tasks completed by referees)
   const { data: referralEarnings = 0 } = useQuery({
     queryKey: ["referral-earnings", user?.telegram_id],
     queryFn: async () => {
       if (!user?.telegram_id) return 0;
       const { data: refs } = await supabase
         .from("referrals")
-        .select("referee_id")
-        .eq("referrer_id", user.telegram_id);
+        .select("invitee_id")
+        .eq("inviter_id", user.telegram_id);
       if (!refs || refs.length === 0) return 0;
-      const refereeIds = refs.map((r) => r.referee_id);
+      const inviteeIds = refs.map((r: any) => r.invitee_id);
       const { count } = await supabase
         .from("user_tasks")
         .select("id", { count: "exact", head: true })
-        .in("user_id", refereeIds)
+        .in("user_id", inviteeIds)
         .eq("status", "completed");
       return count || 0;
     },
@@ -203,9 +202,28 @@ export function ActivityPage() {
     }
   };
 
+  // Completed referral_earning tasks — shown in Activity, not in Tasks page
+  const { data: referralTaskItems = [] } = useQuery({
+    queryKey: ["referral-earning-tasks", user?.telegram_id],
+    queryFn: async () => {
+      if (!user?.telegram_id) return [];
+      const { data } = await supabase
+        .from("user_tasks")
+        .select("id, completed_at, tasks!inner(title_en, title_ar, reward_amount, reward_currency_id, currencies:reward_currency_id(symbol, icon_url))")
+        .eq("user_id", user.telegram_id)
+        .eq("tasks.type", "referral_earning")
+        .eq("status", "completed")
+        .order("completed_at", { ascending: false })
+        .limit(20);
+      return (data || []) as any[];
+    },
+    enabled: !!user?.telegram_id,
+  });
+
   const tabs = [
     { id: "achievements" as const, icon: Trophy,     label: t("achievements") },
     { id: "feed" as const,         icon: LayoutList, label: t("activityFeed") },
+    { id: "referrals" as const,    icon: TrendingUp, label: language === "ar" ? "أرباح الإحالة" : "Referral Earnings" },
   ];
 
   return (
@@ -332,6 +350,53 @@ export function ActivityPage() {
                         </div>
                       </div>
                     </div>
+                  </motion.div>
+                );
+              })
+            )}
+          </motion.div>
+        )}
+
+        {/* ── Referral Earnings Tab ── */}
+        {tab === "referrals" && (
+          <motion.div key="ref-earn" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-2">
+            {referralTaskItems.length === 0 ? (
+              <div className="glass-card rounded-xl p-8 text-center">
+                <TrendingUp className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-sm font-semibold mb-1">{language === "ar" ? "لا توجد أرباح بعد" : "No referral earnings yet"}</p>
+                <p className="text-xs text-muted-foreground">{language === "ar" ? "أكمل مهام الإحالة لتظهر هنا" : "Complete referral tasks to see them here"}</p>
+              </div>
+            ) : (
+              referralTaskItems.map((item: any, i: number) => {
+                const task = item.tasks;
+                const title = language === "ar" && task?.title_ar ? task.title_ar : task?.title_en;
+                const time = item.completed_at
+                  ? formatDistanceToNow(new Date(item.completed_at), { addSuffix: true, locale: language === "ar" ? ar : enUS })
+                  : "";
+                return (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                    className="glass-card rounded-xl p-3 flex items-center gap-3"
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-green-400/10">
+                      {task?.currencies?.icon_url ? (
+                        <img src={task.currencies.icon_url} alt="" className="w-5 h-5 rounded-full" />
+                      ) : (
+                        <TrendingUp className="w-4 h-4 text-green-400" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{title}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{time}</p>
+                    </div>
+                    {task?.reward_amount > 0 && (
+                      <Badge variant="outline" className="text-[9px] shrink-0 border-green-500/30 text-green-400">
+                        +{task.reward_amount} {task.currencies?.symbol || ""}
+                      </Badge>
+                    )}
                   </motion.div>
                 );
               })

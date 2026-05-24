@@ -424,6 +424,142 @@ export function AdminAdsView() {
           Save Bindings
         </Button>
       </div>
+
+      {/* ── Popup Tasks & Prize Draw ── */}
+      <PopupTasksSection save={save} savingKey={savingKey} settings={settings as any} />
+    </div>
+  );
+}
+
+function PopupTasksSection({
+  save,
+  savingKey,
+  settings,
+}: {
+  save: (key: string, value: unknown) => Promise<void>;
+  savingKey: string | null;
+  settings: any;
+}) {
+  const [enabled, setEnabled] = useState(false);
+  const [taskIds, setTaskIds] = useState<string[]>([]);
+  const [newTaskId, setNewTaskId] = useState("");
+  const [prizeEnabled, setPrizeEnabled] = useState(false);
+  const [prizeDesc, setPrizeDesc] = useState("");
+  const [prizeDate, setPrizeDate] = useState("");
+
+  useEffect(() => {
+    if (!settings?.popup_tasks_config) return;
+    const cfg = settings.popup_tasks_config;
+    setEnabled(cfg.enabled ?? false);
+    setTaskIds(Array.isArray(cfg.task_ids) ? cfg.task_ids : []);
+    setPrizeEnabled(cfg.prize_draw_enabled ?? false);
+    setPrizeDesc(cfg.prize_description || "");
+    setPrizeDate(cfg.prize_draw_date || "");
+  }, [settings]);
+
+  const savePopup = () =>
+    save("popup_tasks_config", {
+      enabled,
+      task_ids: taskIds,
+      prize_draw_enabled: prizeEnabled,
+      prize_description: prizeDesc,
+      prize_draw_date: prizeDate,
+    });
+
+  return (
+    <div className="space-y-2 p-3 bg-secondary/40 rounded-xl">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold text-primary">Popup Tasks &amp; Prize Draw</p>
+        <Switch checked={enabled} onCheckedChange={setEnabled} />
+      </div>
+      <p className="text-[10px] text-muted-foreground">
+        Show selected tasks as a popup modal to users (once every 3 hours). Add task IDs from the Tasks panel.
+      </p>
+
+      {/* Task IDs */}
+      <div className="space-y-1.5">
+        {taskIds.map((id, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <Input
+              value={id}
+              onChange={(e) => {
+                const next = [...taskIds];
+                next[idx] = e.target.value;
+                setTaskIds(next);
+              }}
+              className="h-7 text-xs flex-1 font-mono"
+              placeholder="task-uuid"
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7 text-destructive"
+              onClick={() => setTaskIds(taskIds.filter((_, i) => i !== idx))}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <Input
+            value={newTaskId}
+            onChange={(e) => setNewTaskId(e.target.value)}
+            className="h-7 text-xs flex-1 font-mono"
+            placeholder="Paste task UUID here…"
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px] px-2"
+            onClick={() => {
+              if (newTaskId.trim()) {
+                setTaskIds([...taskIds, newTaskId.trim()]);
+                setNewTaskId("");
+              }
+            }}
+          >
+            <Plus className="w-3 h-3 mr-1" /> Add
+          </Button>
+        </div>
+      </div>
+
+      {/* Prize Draw */}
+      <div className="space-y-1.5 pt-2 border-t border-border/40">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-medium text-yellow-400">Prize Draw</p>
+          <Switch checked={prizeEnabled} onCheckedChange={setPrizeEnabled} />
+        </div>
+        {prizeEnabled && (
+          <>
+            <Input
+              value={prizeDesc}
+              onChange={(e) => setPrizeDesc(e.target.value)}
+              className="h-8 text-xs"
+              placeholder="e.g. iPhone 16 Pro — join to win!"
+            />
+            <Input
+              value={prizeDate}
+              onChange={(e) => setPrizeDate(e.target.value)}
+              className="h-8 text-xs"
+              placeholder="Draw date: e.g. 31 Dec 2025"
+            />
+          </>
+        )}
+      </div>
+
+      <Button
+        size="sm"
+        onClick={savePopup}
+        disabled={savingKey === "popup_tasks_config"}
+        className="w-full h-8 text-xs"
+      >
+        {savingKey === "popup_tasks_config" ? (
+          <Loader2 className="w-3 h-3 me-1 animate-spin" />
+        ) : (
+          <Save className="w-3 h-3 me-1" />
+        )}
+        Save Popup Config
+      </Button>
     </div>
   );
 }

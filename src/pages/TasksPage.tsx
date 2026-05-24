@@ -44,6 +44,7 @@ export function TasksPage() {
   const pendingTaskIds   = new Set(userTasks?.filter((ut) => ut.status === "pending").map((ut) => ut.task_id));
 
   const filtered = (tasks || []).filter((task) => {
+    if (task.type === "referral_earning") return false;
     const matchesFilter = activeFilter === "all" || task.type === activeFilter;
     const title = language === "ar" && task.title_ar ? task.title_ar : task.title_en;
     const matchesSearch = title.toLowerCase().includes(search.toLowerCase());
