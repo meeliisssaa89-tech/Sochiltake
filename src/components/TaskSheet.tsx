@@ -283,7 +283,70 @@ export function TaskSheet({
                 </div>
               )}
 
-              {/* Description Images */}
+              {/* Steps with images */}
+              {Array.isArray(task.metadata?.steps) && task.metadata.steps.length > 0 && (
+                <div className="space-y-3">
+                  <p
+                    className="text-[10px] font-semibold uppercase tracking-wider"
+                    style={{ color: "rgba(139,92,246,0.7)" }}
+                  >
+                    {language === "ar" ? "خطوات الإنجاز" : "How to complete"}
+                  </p>
+                  {task.metadata.steps.map((step: any, i: number) => {
+                    const stepTitle =
+                      language === "ar" && step.title_ar ? step.title_ar : step.title_en;
+                    const stepDesc =
+                      language === "ar" && step.description_ar
+                        ? step.description_ar
+                        : step.description_en;
+                    return (
+                      <div
+                        key={i}
+                        className="rounded-2xl overflow-hidden"
+                        style={{
+                          background: "rgba(255,255,255,0.03)",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        {step.image_url && (
+                          <img
+                            src={step.image_url}
+                            alt={stepTitle || `Step ${i + 1}`}
+                            className="w-full object-cover"
+                            style={{ maxHeight: 200 }}
+                          />
+                        )}
+                        <div className="p-3 flex items-start gap-2.5">
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[11px] font-bold"
+                            style={{
+                              background: "rgba(139,92,246,0.2)",
+                              border: "1px solid rgba(139,92,246,0.35)",
+                              color: "rgb(167,139,250)",
+                            }}
+                          >
+                            {i + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            {stepTitle && (
+                              <p className="text-sm font-semibold text-white/90 leading-snug">
+                                {stepTitle}
+                              </p>
+                            )}
+                            {stepDesc && (
+                              <p className="text-xs text-white/50 mt-0.5 leading-relaxed">
+                                {stepDesc}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Description Images (legacy / fallback) */}
               {Array.isArray(task.metadata?.description_images) && task.metadata.description_images.length > 0 && (
                 <div className="space-y-2">
                   {task.metadata.description_images.map((url: string, i: number) => (

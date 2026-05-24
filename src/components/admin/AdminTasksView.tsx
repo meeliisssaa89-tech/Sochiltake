@@ -510,18 +510,94 @@ export function AdminTasksView() {
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground">Description Images (one URL per line — shown in task sheet)</label>
-                <Textarea
-                  value={(editing.metadata?.description_images || []).join("\n")}
-                  onChange={(e) => {
-                    const lines = e.target.value.split("\n").map((l: string) => l.trim()).filter(Boolean);
-                    setEditing({ ...editing, metadata: { ...editing.metadata, description_images: lines } });
-                  }}
-                  rows={3}
-                  className="text-xs"
-                  placeholder={"https://cdn.example.com/step1.png\nhttps://cdn.example.com/step2.png"}
-                />
+              {/* ── Steps editor ── */}
+              <div className="space-y-2 pt-1 border-t border-border/40">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold text-primary">خطوات الشرح (Steps)</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => {
+                      const steps = Array.isArray(editing.metadata?.steps) ? editing.metadata.steps : [];
+                      setEditing({
+                        ...editing,
+                        metadata: {
+                          ...editing.metadata,
+                          steps: [...steps, { title_en: "", title_ar: "", description_en: "", description_ar: "", image_url: "", duration_seconds: 0 }],
+                        },
+                      });
+                    }}
+                  >
+                    <Plus className="w-3 h-3 mr-1" /> إضافة خطوة
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">كل خطوة لها عنوان ووصف وصورة اختيارية — تُعرض للمستخدم بالترتيب داخل ورقة المهمة.</p>
+
+                {(Array.isArray(editing.metadata?.steps) ? editing.metadata.steps : []).map((step: any, idx: number) => {
+                  const updateStep = (field: string, val: string | number) => {
+                    const steps = [...(editing.metadata?.steps || [])];
+                    steps[idx] = { ...steps[idx], [field]: val };
+                    setEditing({ ...editing, metadata: { ...editing.metadata, steps } });
+                  };
+                  const removeStep = () => {
+                    const steps = (editing.metadata?.steps || []).filter((_: any, i: number) => i !== idx);
+                    setEditing({ ...editing, metadata: { ...editing.metadata, steps } });
+                  };
+                  return (
+                    <div key={idx} className="space-y-1.5 p-2 rounded-lg bg-secondary/60 border border-border/40">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-primary/80">الخطوة {idx + 1}</span>
+                        <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={removeStep}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <Input
+                          value={step.title_en || ""}
+                          onChange={(e) => updateStep("title_en", e.target.value)}
+                          className="h-7 text-xs"
+                          placeholder="Step title (EN)"
+                        />
+                        <Input
+                          value={step.title_ar || ""}
+                          onChange={(e) => updateStep("title_ar", e.target.value)}
+                          className="h-7 text-xs"
+                          placeholder="عنوان الخطوة (AR)"
+                        />
+                      </div>
+                      <Textarea
+                        value={step.description_en || ""}
+                        onChange={(e) => updateStep("description_en", e.target.value)}
+                        rows={2}
+                        className="text-xs"
+                        placeholder="Step description (EN) — optional"
+                      />
+                      <Textarea
+                        value={step.description_ar || ""}
+                        onChange={(e) => updateStep("description_ar", e.target.value)}
+                        rows={2}
+                        className="text-xs"
+                        placeholder="وصف الخطوة (AR) — اختياري"
+                      />
+                      <Input
+                        value={step.image_url || ""}
+                        onChange={(e) => updateStep("image_url", e.target.value)}
+                        className="h-7 text-xs"
+                        placeholder="رابط صورة الخطوة (اختياري)"
+                      />
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">مدة الخطوة (ثواني، 0 = بلا مؤقت)</label>
+                        <Input
+                          type="number"
+                          value={step.duration_seconds || 0}
+                          onChange={(e) => updateStep("duration_seconds", +e.target.value || 0)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

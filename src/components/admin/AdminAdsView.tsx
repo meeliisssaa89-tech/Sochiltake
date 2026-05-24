@@ -426,7 +426,9 @@ export function AdminAdsView() {
       </div>
 
       {/* ── Popup Tasks & Prize Draw ── */}
-      <PopupTasksSection save={save} savingKey={savingKey} settings={settings as any} />
+      <div className="glass-card rounded-xl p-3">
+        <PopupTasksSection save={save} savingKey={savingKey} settings={settings as any} />
+      </div>
     </div>
   );
 }
