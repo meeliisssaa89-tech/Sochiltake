@@ -3,7 +3,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
 import { useCheckinStatus, useDailyCheckin, useUserTasks, useTasks, useAppSettings } from "@/hooks/useSupabaseData";
 import { AppIcon } from "@/components/AppIcon";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { GlowAvatar } from "@/components/GlowAvatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -62,7 +62,7 @@ export function HomePage() {
     try {
       const result = await checkinMutation.mutateAsync(userId);
       hapticNotification("success");
-      toast({ title: t("success"), description: `+${result.reward} ${result.currencySymbol || "TON"}  •  +${result.xpReward} ${t("exp")} (${result.streak} ${t("streak")})` });
+      toast({ title: t("success"), description: `+${result.reward} ${result.currencySymbol || "TON"}  â¢  +${result.xpReward} ${t("exp")} (${result.streak} ${t("streak")})` });
     } catch (err: any) {
       hapticNotification("error");
       toast({ title: t("error"), description: err.message, variant: "destructive" });
@@ -76,10 +76,12 @@ export function HomePage() {
     <div className="space-y-4 pb-4">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl p-4">
         <div className="flex items-center gap-3">
-          <Avatar className="h-14 w-14 border-2 border-primary/30">
-            <AvatarImage src={user?.photo_url} />
-            <AvatarFallback className="bg-secondary text-lg font-bold">{user?.first_name?.[0] || "U"}</AvatarFallback>
-          </Avatar>
+          <GlowAvatar
+              userId={user?.telegram_id || ""}
+              name={user?.first_name || user?.username || "U"}
+              size={56}
+              animate={true}
+            />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-bold truncate">{user?.first_name} {user?.last_name}</h2>
@@ -121,7 +123,7 @@ export function HomePage() {
                 {checkinLoading ? "..." : checkinData?.streak || 0} {t("streak")}
                 {checkinData?.nextReward ? (
                   <span className="ms-1 text-accent font-semibold">
-                    • +{checkinData.nextReward} {checkinData.currencySymbol}
+                    â¢ +{checkinData.nextReward} {checkinData.currencySymbol}
                   </span>
                 ) : null}
               </p>
@@ -145,7 +147,7 @@ export function HomePage() {
         </div>
       </motion.div>
 
-      {/* Daily Ads — same shape as check-in */}
+      {/* Daily Ads â same shape as check-in */}
       <DailyAdsCard />
 
       {/* Spin & Win wheel */}
