@@ -6,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useUser } from "@/contexts/UserContext";
 import { useCreateWithdrawal, useUserWithdrawals } from "@/hooks/useSupabaseData";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { GradientAvatar } from "@/components/GradientAvatar";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -135,10 +136,14 @@ export function ProfilePage() {
               <p className="text-xs text-muted-foreground">{t("totalBalance")}</p>
               <p className="text-3xl font-bold tabular-nums mt-1">${totalUsd.toFixed(2)}</p>
             </div>
-            <Avatar className="h-12 w-12 border-2 border-primary/30">
-              <AvatarImage src={user?.photo_url} />
-              <AvatarFallback className="bg-secondary text-sm font-bold">{user?.first_name?.[0] || "U"}</AvatarFallback>
-            </Avatar>
+            {user?.photo_url ? (
+              <Avatar className="h-12 w-12 border-2 border-primary/30">
+                <AvatarImage src={user?.photo_url} />
+                <AvatarFallback className="bg-secondary text-sm font-bold">{user?.first_name?.[0] || "U"}</AvatarFallback>
+              </Avatar>
+            ) : (
+              <GradientAvatar name={user?.first_name || user?.username} size={48} />
+            )}
           </div>
           <div className="mt-4">
             <Button

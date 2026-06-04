@@ -12,7 +12,14 @@ const LanguageContext = createContext<LanguageContextType | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem("cyberpulse_lang") as Language) || "en";
+    const stored = localStorage.getItem("cyberpulse_lang");
+    if (stored === "ar" || stored === "en") return stored as Language;
+    // Auto-detect from Telegram WebApp user language
+    try {
+      const tgLang = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.language_code;
+      if (tgLang && String(tgLang).startsWith("ar")) return "ar";
+    } catch { /* noop */ }
+    return "en";
   });
 
   const setLanguage = useCallback((lang: Language) => {

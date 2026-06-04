@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle, Loader2, Eye, Camera, Mail, FileText, CreditCard, User, ExternalLink } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Eye, Camera, Mail, FileText, CreditCard, User, ExternalLink, Image as ImageIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Submission {
@@ -48,33 +48,19 @@ export function AdminSubmissionsView() {
   });
 
   const approve = async (sub: Submission) => {
-    if (!confirm(`Approve submission and credit ${sub.tasks.reward_amount} ${sub.tasks.currencies?.symbol || ""}?`)) return;
+    if (!confirm(`Approve this submission and credit ${sub.tasks.reward_amount} ${sub.tasks.currencies?.symbol || ""}?`)) return;
     setProcessing(sub.id);
     try {
-      await supabase.from("user_tasks")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("id", sub.id);
-
-      if (sub.tasks.reward_amount > 0 && sub.tasks.reward_currency_id) {
-        await adminAction("adjust_balance", {
-          userId: sub.user_id,
-          currencyId: sub.tasks.reward_currency_id,
-          amount: sub.tasks.reward_amount,
-          mode: "add",
-        });
-      }
-
-      if (sub.tasks.xp_reward > 0) {
-        const { data: ud } = await supabase.from("users").select("exp, level").eq("telegram_id", sub.user_id).single();
-        if (ud) {
-          const newExp = (ud.exp || 0) + sub.tasks.xp_reward;
-          const newLevel = Math.floor(newExp / 5000) + 1;
-          await supabase.from("users").update({ exp: newExp, level: newLevel }).eq("telegram_id", sub.user_id);
-        }
-      }
-
+      // Use service-role edge function to update status (bypasses RLS)
+      await adminAction("approve_submission", {
+        userTaskId: sub.id,
+        userId: sub.user_id,
+        currencyId: sub.tasks.reward_currency_id,
+        rewardAmount: sub.tasks.reward_amount,
+        xpReward: sub.tasks.xp_reward,
+      });
       qc.invalidateQueries({ queryKey: ["admin-submissions"] });
-      toast({ title: "Approved", description: "Reward credited to user." });
+      toast({ title: "✅ Approved", description: "Reward credited to user." });
       if (selected?.id === sub.id) setSelected(null);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -84,12 +70,12 @@ export function AdminSubmissionsView() {
   };
 
   const reject = async (sub: Submission) => {
-    if (!confirm("Reject this submission? User will need to resubmit.")) return;
+    if (!confirm("Reject this submission? The user will need to resubmit.")) return;
     setProcessing(sub.id);
     try {
-      await supabase.from("user_tasks")
-        .update({ status: "rejected", metadata: { ...sub.metadata, rejected_at: new Date().toISOString() } })
-        .eq("id", sub.id);
+      await adminAction("reject_submission", {
+        userTaskId: sub.id,
+      });
       qc.invalidateQueries({ queryKey: ["admin-submissions"] });
       toast({ title: "Rejected" });
       if (selected?.id === sub.id) setSelected(null);
@@ -102,11 +88,65 @@ export function AdminSubmissionsView() {
 
   const subTypeIcon = (type: string) => {
     switch (type) {
-      case "photo": return Camera;
+      case "photo": case "screenshot": return Camera;
       case "email": return Mail;
       case "id_document": return CreditCard;
       default: return FileText;
     }
+  };
+
+  /** Render user-submitted fields (structured submission_fields array or flat keys) */
+  const renderSubmissionData = (meta: any) => {
+    const items: { label: string; value: string; isImage?: boolean; isSecret?: boolean }[] = [];
+
+    // Structured fields (new format: array of {type, label, value})
+    if (Array.isArray(meta?.submission_fields)) {
+      for (const f of meta.submission_fields) {
+        if (!f?.value) continue;
+        const isImage = f.type === "photo" || f.type === "screenshot" || String(f.value).match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i);
+        const isSecret = f.type === "password";
+        items.push({ label: f.label || f.type || "Field", value: String(f.value), isImage: !!isImage, isSecret });
+      }
+    }
+
+    // Flat legacy fields
+    if (meta?.submission_email) items.push({ label: "Email", value: meta.submission_email });
+    if (meta?.submission_password) items.push({ label: "Password", value: meta.submission_password, isSecret: true });
+    if (meta?.submission_text) items.push({ label: "Note", value: meta.submission_text });
+    if (meta?.submission_url) {
+      const isImage = String(meta.submission_url).match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i);
+      items.push({ label: "Attachment", value: meta.submission_url, isImage: !!isImage });
+    }
+
+    if (items.length === 0) return null;
+
+    return (
+      <div className="p-2 rounded-lg bg-secondary/40 space-y-1.5">
+        {items.map((item, i) => (
+          <div key={i}>
+            <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wide">{item.label}</p>
+            {item.isImage ? (
+              <div className="flex items-center gap-2 mt-0.5">
+                <button
+                  onClick={() => setSelected({ ...selected! })}
+                  className="flex items-center gap-1 text-[10px] text-primary hover:underline"
+                >
+                  <ImageIcon className="w-3 h-3" />
+                  View image
+                </button>
+                <a href={item.value} target="_blank" rel="noopener noreferrer" className="text-[10px] text-muted-foreground flex items-center gap-0.5 hover:underline">
+                  <ExternalLink className="w-2.5 h-2.5" /> Open
+                </a>
+              </div>
+            ) : item.isSecret ? (
+              <code className="text-[10px] font-mono text-orange-400 break-all bg-orange-500/10 px-1.5 py-0.5 rounded block mt-0.5">{item.value}</code>
+            ) : (
+              <p className="text-[11px] text-foreground/80 break-all mt-0.5">{item.value}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -121,6 +161,9 @@ export function AdminSubmissionsView() {
             }`}
           >
             {f}
+            {f === "pending" && submissions && filter === "pending" && submissions.length > 0 && (
+              <span className="ms-1 bg-destructive text-destructive-foreground text-[9px] px-1.5 rounded-full">{submissions.length}</span>
+            )}
           </button>
         ))}
       </div>
@@ -137,8 +180,11 @@ export function AdminSubmissionsView() {
         <div className="space-y-2">
           {submissions.map((sub) => {
             const meta = sub.metadata || {};
-            const SubIcon = subTypeIcon(meta.submission_type);
+            const submType = meta.submission_type || "text";
+            const SubIcon = subTypeIcon(submType);
             const isProcessing = processing === sub.id;
+            const imageUrl = meta.submission_url || meta.submission_fields?.find((f: any) => f.type === "photo" || f.type === "screenshot")?.value;
+
             return (
               <motion.div
                 key={sub.id}
@@ -163,7 +209,7 @@ export function AdminSubmissionsView() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-secondary/60 text-[10px] text-muted-foreground">
                       <SubIcon className="w-3 h-3" />
-                      {meta.submission_type || "text"}
+                      {submType}
                     </div>
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(sub.started_at).toLocaleDateString()}
@@ -171,39 +217,22 @@ export function AdminSubmissionsView() {
                   </div>
                 </div>
 
-                {(meta.submission_url || meta.submission_text || meta.submission_email || meta.submission_password) && (
-                  <div className="p-2 rounded-lg bg-secondary/40 space-y-1">
-                    {meta.submission_url && (
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-[10px] text-muted-foreground">Attachment:</p>
-                        <a
-                          href={meta.submission_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] text-primary flex items-center gap-0.5 hover:underline"
-                        >
-                          View file <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
-                        {meta.submission_url.match(/\.(jpg|jpeg|png|gif|webp)$/i) && (
-                          <button onClick={() => setSelected(sub)} className="text-[10px] text-accent hover:underline">
-                            Preview
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {meta.submission_text && (
-                      <p className="text-[11px] text-foreground/80 line-clamp-2">{meta.submission_text}</p>
-                    )}
-                    {meta.submission_email && (
-                      <p className="text-[11px] text-foreground/80">{meta.submission_email}</p>
-                    )}
-                    {meta.submission_password && (
-                      <div className="flex items-start gap-1.5">
-                        <p className="text-[10px] text-muted-foreground shrink-0">Password:</p>
-                        <code className="text-[10px] font-mono text-orange-400 break-all bg-orange-500/10 px-1.5 py-0.5 rounded">{meta.submission_password}</code>
-                      </div>
-                    )}
-                  </div>
+                {/* Submitted data */}
+                {renderSubmissionData(meta)}
+
+                {/* Image preview thumbnail */}
+                {imageUrl && (
+                  <button
+                    onClick={() => setSelected(sub)}
+                    className="w-full rounded-lg overflow-hidden border border-border/40 hover:border-primary/40 transition-colors"
+                  >
+                    <img
+                      src={imageUrl}
+                      alt="Submission"
+                      className="w-full max-h-40 object-contain bg-secondary/30"
+                    />
+                    <p className="text-[9px] text-muted-foreground py-1 text-center">Tap to enlarge</p>
+                  </button>
                 )}
 
                 {filter === "pending" && (
@@ -228,12 +257,19 @@ export function AdminSubmissionsView() {
                     </Button>
                   </div>
                 )}
+
+                {filter !== "pending" && (
+                  <div className="text-[10px] text-center text-muted-foreground">
+                    {filter === "completed" ? "✅ Approved" : "❌ Rejected"}
+                  </div>
+                )}
               </motion.div>
             );
           })}
         </div>
       )}
 
+      {/* Lightbox */}
       <AnimatePresence>
         {selected && (
           <motion.div
@@ -241,7 +277,7 @@ export function AdminSubmissionsView() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: "rgba(0,0,0,0.8)" }}
+            style={{ background: "rgba(0,0,0,0.85)" }}
             onClick={() => setSelected(null)}
           >
             <motion.div
@@ -251,24 +287,26 @@ export function AdminSubmissionsView() {
               onClick={(e) => e.stopPropagation()}
               className="max-w-sm w-full rounded-2xl overflow-hidden bg-card border border-border"
             >
-              {selected.metadata?.submission_url && (
-                <img
-                  src={selected.metadata.submission_url}
-                  alt="Submission"
-                  className="w-full max-h-80 object-contain"
-                />
-              )}
+              {(() => {
+                const imgUrl = selected.metadata?.submission_url ||
+                  selected.metadata?.submission_fields?.find((f: any) => f.type === "photo" || f.type === "screenshot")?.value;
+                return imgUrl ? (
+                  <img src={imgUrl} alt="Submission" className="w-full max-h-96 object-contain" />
+                ) : null;
+              })()}
               <div className="p-3 flex gap-2">
                 <Button size="sm" variant="outline" className="flex-1 h-8 text-xs rounded-lg" onClick={() => setSelected(null)}>Close</Button>
-                <Button
-                  size="sm"
-                  className="flex-1 h-8 text-xs rounded-lg bg-success/20 text-success border border-success/30 hover:bg-success/30"
-                  variant="outline"
-                  disabled={processing === selected.id}
-                  onClick={() => approve(selected)}
-                >
-                  {processing === selected.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Approve"}
-                </Button>
+                {selected.status === "pending" && (
+                  <Button
+                    size="sm"
+                    className="flex-1 h-8 text-xs rounded-lg bg-success/20 text-success border border-success/30 hover:bg-success/30"
+                    variant="outline"
+                    disabled={processing === selected.id}
+                    onClick={() => approve(selected)}
+                  >
+                    {processing === selected.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Approve"}
+                  </Button>
+                )}
               </div>
             </motion.div>
           </motion.div>

@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
   import { useUser } from "@/contexts/UserContext";
   import { useAppSettings } from "@/hooks/useSupabaseData";
   import { ADMIN_PATH } from "@/lib/adminAuth";
+import { OnboardingModal } from "@/components/OnboardingModal";
 
   const pages: Record<string, React.ComponentType> = {
     home: HomePage,
@@ -198,7 +199,8 @@ import { useState, useEffect } from "react";
               </motion.div>
             </AnimatePresence>
           </main>
-          <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+          <OnboardingModal />
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
       </div>
     );

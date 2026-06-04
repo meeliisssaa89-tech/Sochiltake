@@ -24,6 +24,8 @@ interface AdsConfig {
   duration_seconds: number;
   enabled: boolean;
   direct_link: string;
+  bulk_reward_mode: boolean;
+  completion_reward: number;
 }
 
 interface ButtonBindings {
@@ -181,6 +183,22 @@ export function AdminAdsView() {
             <label className="text-[10px] text-muted-foreground">Reward per ad</label>
             <Input type="number" value={ads.reward_per_ad} onChange={(e) => setAds({ ...ads, reward_per_ad: +e.target.value })} className="h-8" />
           </div>
+          <div className="col-span-2">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground">Bulk Reward Mode</p>
+                <p className="text-[9px] text-muted-foreground/60">Credit one total reward when ALL ads are watched (instead of per-ad)</p>
+              </div>
+              <Switch checked={ads.bulk_reward_mode || false} onCheckedChange={(v) => setAds({ ...ads, bulk_reward_mode: v })} />
+            </div>
+            {ads.bulk_reward_mode && (
+              <div>
+                <label className="text-[10px] text-muted-foreground">Completion Reward (total amount)</label>
+                <Input type="number" value={ads.completion_reward || 0} onChange={(e) => setAds({ ...ads, completion_reward: +e.target.value })} className="h-8" placeholder="e.g. 1" />
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="text-[10px] text-muted-foreground">XP per ad</label>
             <Input type="number" value={ads.xp_per_ad} onChange={(e) => setAds({ ...ads, xp_per_ad: +e.target.value })} className="h-8" />

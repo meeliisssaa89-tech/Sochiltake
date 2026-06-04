@@ -133,7 +133,7 @@ export function DailyAdsCard() {
             <h3 className="font-semibold text-sm">{t("dailyAds")}</h3>
             <p className="text-[10px] text-muted-foreground flex items-center gap-1">
               <Coins className="w-3 h-3 text-accent" />
-              +{adsConfig.reward_per_ad} {currencySymbol}{adsConfig.xp_per_ad > 0 ? ` · +${adsConfig.xp_per_ad} EXP` : ""}
+              {adsConfig.bulk_reward_mode ? `Complete all • +${adsConfig.completion_reward || adsConfig.reward_per_ad} ${currencySymbol}` : `+${adsConfig.reward_per_ad} ${currencySymbol}${adsConfig.xp_per_ad > 0 ? ` · +${adsConfig.xp_per_ad} EXP` : ""}`}
             </p>
           </div>
         </div>

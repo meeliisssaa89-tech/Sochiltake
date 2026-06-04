@@ -167,7 +167,7 @@ export function AdminTasksView() {
             : null,
           webAppUrl,
         });
-        toast({ title: `ð£ Sent to ${r.sent} users` });
+        toast({ title: `📣 Sent to ${r.sent} users` });
       } catch (e: any) {
         toast({ title: "Notification failed", description: e.message, variant: "destructive" });
       }
@@ -235,7 +235,7 @@ export function AdminTasksView() {
 
           {/* Task Icon */}
           <div>
-            <label className="text-[10px] text-muted-foreground">Task Icon (optional â supports GIF)</label>
+            <label className="text-[10px] text-muted-foreground">Task Icon (optional — supports GIF)</label>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center overflow-hidden border border-border">
                 {editing.icon_url ? (
@@ -247,7 +247,7 @@ export function AdminTasksView() {
               <Input
                 value={editing.icon_url}
                 onChange={(e) => setEditing({ ...editing, icon_url: e.target.value })}
-                placeholder="Paste URL or upload â"
+                placeholder="Paste URL or upload ↓"
                 className="h-8 text-xs flex-1"
               />
               <input
@@ -278,7 +278,7 @@ export function AdminTasksView() {
             <Input value={editing.title_en} onChange={(e) => setEditing({ ...editing, title_en: e.target.value })} className="h-8 text-xs" />
           </div>
           <div>
-            <label className="text-[10px] text-muted-foreground">Ø§ÙØ¹ÙÙØ§Ù (Ø¹Ø±Ø¨Ù)</label>
+            <label className="text-[10px] text-muted-foreground">العنوان (عربي)</label>
             <Input value={editing.title_ar} onChange={(e) => setEditing({ ...editing, title_ar: e.target.value })} className="h-8 text-xs" />
           </div>
           <div>
@@ -286,7 +286,7 @@ export function AdminTasksView() {
             <Textarea value={editing.description_en} onChange={(e) => setEditing({ ...editing, description_en: e.target.value })} rows={2} className="text-xs" />
           </div>
           <div>
-            <label className="text-[10px] text-muted-foreground">Ø§ÙÙØµÙ (Ø¹Ø±Ø¨Ù)</label>
+            <label className="text-[10px] text-muted-foreground">الوصف (عربي)</label>
             <Textarea value={editing.description_ar} onChange={(e) => setEditing({ ...editing, description_ar: e.target.value })} rows={2} className="text-xs" />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -309,7 +309,7 @@ export function AdminTasksView() {
               <Select value={editing.reward_currency_id || "none"} onValueChange={(v) => setEditing({ ...editing, reward_currency_id: v === "none" ? null : v })}>
                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">â None â</SelectItem>
+                  <SelectItem value="none">— None —</SelectItem>
                   {(currencies || []).map((c: any) => (
                     <SelectItem key={c.id} value={c.id}>{c.symbol} ({c.name})</SelectItem>
                   ))}
@@ -333,7 +333,7 @@ export function AdminTasksView() {
           {/* Extra rewards (multi-currency) */}
           <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
             <div className="flex items-center justify-between">
-              <p className="text-[10px] font-medium text-primary">ÙÙØ§ÙØ¢Øª Ø¥Ø¶Ø§ÙÙØ© (Ø¹ÙÙØ§Øª Ø£Ø®Ø±Ù)</p>
+              <p className="text-[10px] font-medium text-primary">مكافآت إضافية (عملات أخرى)</p>
               <Button
                 size="sm"
                 variant="outline"
@@ -352,14 +352,14 @@ export function AdminTasksView() {
                 }}
               >
                 <Plus className="w-3 h-3 mr-1" />
-                Ø¥Ø¶Ø§ÙØ©
+                إضافة
               </Button>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              ØªØ³ØªØ·ÙØ¹ ÙÙØ­ Ø§ÙÙØ³ØªØ®Ø¯Ù Ø£ÙØ«Ø± ÙÙ Ø¹ÙÙØ© Ø¹ÙØ¯ Ø¥ÙÙØ§Ù ÙÙØ³ Ø§ÙÙÙÙØ©. ØªÙØ¶Ø§Ù ÙÙÙ Ø§ÙØ¹ÙÙØ§Øª ÙØ¹Ø§Ù.
+              تستطيع منح المستخدم أكثر من عملة عند إكمال نفس المهمة. تُضاف لكل العملات معاً.
             </p>
             {editing.extra_rewards.length === 0 && (
-              <p className="text-[10px] text-muted-foreground/70 italic">ÙØ§ ØªÙØ¬Ø¯ ÙÙØ§ÙØ¢Øª Ø¥Ø¶Ø§ÙÙØ© Ø¨Ø¹Ø¯.</p>
+              <p className="text-[10px] text-muted-foreground/70 italic">لا توجد مكافآت إضافية بعد.</p>
             )}
             {editing.extra_rewards.map((r, idx) => (
               <div key={idx} className="flex items-center gap-2">
@@ -418,7 +418,7 @@ export function AdminTasksView() {
                 The bot must be an admin in the channel/group for verification to work.
               </p>
               <div>
-                <label className="text-[10px] text-muted-foreground">Channel/Group ID (with @ or -100â¦)</label>
+                <label className="text-[10px] text-muted-foreground">Channel/Group ID (with @ or -100…)</label>
                 <Input
                   value={editing.metadata?.channel_id || ""}
                   onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, channel_id: e.target.value } })}
@@ -471,7 +471,7 @@ export function AdminTasksView() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground">App / Redirect Link (optional â shown as a separate button)</label>
+                <label className="text-[10px] text-muted-foreground">App / Redirect Link (optional — shown as a separate button)</label>
                 <Input
                   value={editing.metadata?.app_link || ""}
                   onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, app_link: e.target.value } })}
@@ -511,7 +511,7 @@ export function AdminTasksView() {
                 </div>
               </div>
 
-                {/* ── Section / Countries / Submission Fields / Max Accounts ── */}
+                {/*    Section / Countries / Submission Fields / Max Accounts    */}
                 <div className="space-y-2 pt-2 border-t border-border/40">
                   <div>
                     <label className="text-[10px] text-muted-foreground font-semibold">Tab Section (which page tab?)</label>
@@ -536,7 +536,7 @@ export function AdminTasksView() {
                         setEditing({ ...editing, metadata: { ...editing.metadata, countries: arr } });
                       }}
                       className="h-8 text-xs mt-1"
-                      placeholder="SA, AE, EG, TR — ISO codes, comma-separated"
+                      placeholder="SA, AE, EG, TR  ISO codes, comma-separated"
                     />
                     <p className="text-[9px] text-muted-foreground/60 mt-0.5">Country flags shown next to task. Leave blank for all countries.</p>
                   </div>
@@ -582,10 +582,10 @@ export function AdminTasksView() {
                     <p className="text-[9px] text-muted-foreground/60 mt-0.5">How many accounts a user can submit for this task.</p>
                   </div>
                 </div>
-              {/* ââ Steps editor ââ */}
+              {/* ── Steps editor ── */}
               <div className="space-y-2 pt-1 border-t border-border/40">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-semibold text-primary">Ø®Ø·ÙØ§Øª Ø§ÙØ´Ø±Ø­ (Steps)</p>
+                  <p className="text-[10px] font-semibold text-primary">خطوات الشرح (Steps)</p>
                   <Button
                     size="sm"
                     variant="outline"
@@ -601,10 +601,10 @@ export function AdminTasksView() {
                       });
                     }}
                   >
-                    <Plus className="w-3 h-3 mr-1" /> Ø¥Ø¶Ø§ÙØ© Ø®Ø·ÙØ©
+                    <Plus className="w-3 h-3 mr-1" /> إضافة خطوة
                   </Button>
                 </div>
-                <p className="text-[10px] text-muted-foreground">ÙÙ Ø®Ø·ÙØ© ÙÙØ§ Ø¹ÙÙØ§Ù ÙÙØµÙ ÙØµÙØ±Ø© Ø§Ø®ØªÙØ§Ø±ÙØ© â ØªÙØ¹Ø±Ø¶ ÙÙÙØ³ØªØ®Ø¯Ù Ø¨Ø§ÙØªØ±ØªÙØ¨ Ø¯Ø§Ø®Ù ÙØ±ÙØ© Ø§ÙÙÙÙØ©.</p>
+                <p className="text-[10px] text-muted-foreground">كل خطوة لها عنوان ووصف وصورة اختيارية — تُعرض للمستخدم بالترتيب داخل ورقة المهمة.</p>
 
                 {(Array.isArray(editing.metadata?.steps) ? editing.metadata.steps : []).map((step: any, idx: number) => {
                   const updateStep = (field: string, val: string | number) => {
@@ -619,7 +619,7 @@ export function AdminTasksView() {
                   return (
                     <div key={idx} className="space-y-1.5 p-2 rounded-lg bg-secondary/60 border border-border/40">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-primary/80">Ø§ÙØ®Ø·ÙØ© {idx + 1}</span>
+                        <span className="text-[10px] font-bold text-primary/80">الخطوة {idx + 1}</span>
                         <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={removeStep}>
                           <Trash2 className="w-3 h-3" />
                         </Button>
@@ -635,7 +635,7 @@ export function AdminTasksView() {
                           value={step.title_ar || ""}
                           onChange={(e) => updateStep("title_ar", e.target.value)}
                           className="h-7 text-xs"
-                          placeholder="Ø¹ÙÙØ§Ù Ø§ÙØ®Ø·ÙØ© (AR)"
+                          placeholder="عنوان الخطوة (AR)"
                         />
                       </div>
                       <Textarea
@@ -643,20 +643,20 @@ export function AdminTasksView() {
                         onChange={(e) => updateStep("description_en", e.target.value)}
                         rows={2}
                         className="text-xs"
-                        placeholder="Step description (EN) â optional"
+                        placeholder="Step description (EN) — optional"
                       />
                       <Textarea
                         value={step.description_ar || ""}
                         onChange={(e) => updateStep("description_ar", e.target.value)}
                         rows={2}
                         className="text-xs"
-                        placeholder="ÙØµÙ Ø§ÙØ®Ø·ÙØ© (AR) â Ø§Ø®ØªÙØ§Ø±Ù"
+                        placeholder="وصف الخطوة (AR) — اختياري"
                       />
                       <Input
                         value={step.image_url || ""}
                         onChange={(e) => updateStep("image_url", e.target.value)}
                         className="h-7 text-xs"
-                        placeholder="Ø±Ø§Ø¨Ø· ØµÙØ±Ø© Ø§ÙØ®Ø·ÙØ© (Ø§Ø®ØªÙØ§Ø±Ù)"
+                        placeholder="رابط صورة الخطوة (اختياري)"
                       />
                         <Input
                           value={step.video_url || ""}
@@ -665,7 +665,7 @@ export function AdminTasksView() {
                           placeholder="Video URL - YouTube or direct link (optional)"
                         />
                       <div>
-                        <label className="text-[10px] text-muted-foreground">ÙØ¯Ø© Ø§ÙØ®Ø·ÙØ© (Ø«ÙØ§ÙÙØ 0 = Ø¨ÙØ§ ÙØ¤ÙØª)</label>
+                        <label className="text-[10px] text-muted-foreground">مدة الخطوة (ثواني، 0 = بلا مؤقت)</label>
                         <Input
                           type="number"
                           value={step.duration_seconds || 0}
@@ -687,7 +687,7 @@ export function AdminTasksView() {
               <p className="text-[10px] text-muted-foreground">
                 User visits the redirect URL, gets a one-time code, then submits it.
                 Placeholders replaced: <code>{`{{user_id}}`}</code>, <code>{`{{code}}`}</code>, and <code>{`{{token}}`}</code>{" "}
-                â a fresh secure session token is generated on every "Start" so each visit gets its own one-time code.
+                — a fresh secure session token is generated on every "Start" so each visit gets its own one-time code.
               </p>
 
               <PublisherArticlePicker
@@ -790,7 +790,7 @@ export function AdminTasksView() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground">Max total completions (blank = â)</label>
+                  <label className="text-[10px] text-muted-foreground">Max total completions (blank = ∞)</label>
                   <Input
                     type="number"
                     value={editing.max_completions ?? ""}
@@ -816,7 +816,7 @@ export function AdminTasksView() {
             <p className="text-[10px] font-semibold text-muted-foreground">Renewal & Limits</p>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-muted-foreground">Max completions (blank = â)</label>
+                <label className="text-[10px] text-muted-foreground">Max completions (blank = ∞)</label>
                 <Input
                   type="number"
                   placeholder="Unlimited"
@@ -842,12 +842,12 @@ export function AdminTasksView() {
           {/* Referral Earning metadata */}
           {editing.type === "referral_earning" && (
             <div className="space-y-2 p-2 bg-secondary/40 rounded-lg">
-              <p className="text-[10px] font-medium text-primary">ð¤ Referral Earnings Task</p>
+              <p className="text-[10px] font-medium text-primary">🤝 Referral Earnings Task</p>
               <p className="text-[10px] text-muted-foreground">
-                ÙÙÙÙÙ Ø§ÙÙØ³ØªØ®Ø¯Ù ÙØ°Ù Ø§ÙÙÙÙØ© Ø¹ÙØ¯ÙØ§ ÙÙØ³Ø¨ Ø§ÙÙØ¯Ø¹ÙÙÙ ÙÙÙ ÙØ¨ÙØºØ§Ù ÙØ¹ÙÙÙØ§Ù ÙÙ Ø§ÙØ¹ÙÙØ©. ÙØ­Ø¯ÙØ¯ Ø§ÙØ­Ø¯ Ø§ÙØ£Ø¯ÙÙ Ø£Ø¯ÙØ§Ù.
+                يُكمل المستخدم هذه المهمة عندما يكسب المدعوون منه مبلغاً معيّناً من العملة. محدّد الحد الأدنى أدناه.
               </p>
               <div>
-                <label className="text-[10px] text-muted-foreground">Ø§ÙØ­Ø¯ Ø§ÙØ£Ø¯ÙÙ ÙØ¥Ø¬ÙØ§ÙÙ Ø£Ø±Ø¨Ø§Ø­ Ø§ÙÙØ¯Ø¹ÙÙÙ</label>
+                <label className="text-[10px] text-muted-foreground">الحد الأدنى لإجمالي أرباح المدعوين</label>
                 <Input
                   type="number"
                   value={editing.metadata?.min_referral_earnings ?? 100}
@@ -857,14 +857,14 @@ export function AdminTasksView() {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground">Ø§ÙØ¹ÙÙØ© Ø§ÙÙÙØ±Ø§Ø¯ Ø§Ø­ØªØ³Ø§Ø¨ Ø§ÙØ£Ø±Ø¨Ø§Ø­ Ø¨ÙØ§</label>
+                <label className="text-[10px] text-muted-foreground">العملة المُراد احتساب الأرباح بها</label>
                 <Select
                   value={editing.metadata?.earning_currency_id || "any"}
                   onValueChange={(v) => setEditing({ ...editing, metadata: { ...editing.metadata, earning_currency_id: v === "any" ? null : v } })}
                 >
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="any">â Ø£Ù Ø¹ÙÙØ© (ÙØ¬ÙÙØ¹ Ø§ÙÙÙ) â</SelectItem>
+                    <SelectItem value="any">— أي عملة (مجموع الكل) —</SelectItem>
                     {(currencies || []).map((c: any) => (
                       <SelectItem key={c.id} value={c.id}>{c.symbol} ({c.name})</SelectItem>
                     ))}
@@ -872,13 +872,13 @@ export function AdminTasksView() {
                 </Select>
               </div>
               <div>
-                <label className="text-[10px] text-muted-foreground">Ø§ÙØ­Ø¯ Ø§ÙØ£Ø¯ÙÙ ÙØ¹Ø¯Ø¯ Ø§ÙÙØ¯Ø¹ÙÙÙ (Ø§Ø®ØªÙØ§Ø±Ù)</label>
+                <label className="text-[10px] text-muted-foreground">الحد الأدنى لعدد المدعوين (اختياري)</label>
                 <Input
                   type="number"
                   value={editing.metadata?.min_referral_count ?? ""}
                   onChange={(e) => setEditing({ ...editing, metadata: { ...editing.metadata, min_referral_count: e.target.value === "" ? null : +e.target.value } })}
                   className="h-8 text-xs"
-                  placeholder="e.g. 5 (Ø§ØªØ±ÙÙ ÙØ§Ø±ØºØ§Ù ÙØ¹Ø¯Ù Ø§ÙØ§Ø´ØªØ±Ø§Ø·)"
+                  placeholder="e.g. 5 (اتركه فارغاً لعدم الاشتراط)"
                 />
               </div>
             </div>
@@ -928,7 +928,7 @@ export function AdminTasksView() {
           {!editing.id && (
             <div className="border-t border-border/40 pt-2 mt-1 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium flex-1">ð£ Notify Telegram users</span>
+                <span className="text-xs font-medium flex-1">📣 Notify Telegram users</span>
                 <Switch
                   checked={editing.notify_telegram}
                   onCheckedChange={(v) => setEditing({ ...editing, notify_telegram: v })}
@@ -937,7 +937,7 @@ export function AdminTasksView() {
               {editing.notify_telegram && (
                 <div>
                   <label className="text-[10px] text-muted-foreground">
-                    Featured user (optional â name + photo in message)
+                    Featured user (optional — name + photo in message)
                   </label>
                   <Select
                     value={editing.featured_user_id || "none"}
@@ -947,7 +947,7 @@ export function AdminTasksView() {
                   >
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">â None â</SelectItem>
+                      <SelectItem value="none">— None —</SelectItem>
                       {(allUsers || []).slice(0, 100).map((u: any) => (
                         <SelectItem key={u.telegram_id} value={u.telegram_id}>
                           {u.first_name || u.username || u.telegram_id}
@@ -1017,7 +1017,7 @@ export function AdminTasksView() {
   );
 }
 
-// âââ Publisher article picker (used inside code-task editor) ââââââââââ
+// ─── Publisher article picker (used inside code-task editor) ──────────
 interface PubArticle {
   id: string;
   slug: string;
@@ -1121,7 +1121,7 @@ function PublisherArticlePicker({
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search articlesâ¦"
+              placeholder="Search articles…"
               className="h-7 text-[11px] ps-7"
               data-testid="input-search-articles"
             />
@@ -1130,7 +1130,7 @@ function PublisherArticlePicker({
             {isLoading && (
               <p className="text-[10px] text-muted-foreground text-center py-3">
                 <Loader2 className="w-3 h-3 inline animate-spin me-1" />
-                Loadingâ¦
+                Loading…
               </p>
             )}
             {!isLoading && filtered.length === 0 && (
@@ -1163,7 +1163,7 @@ function PublisherArticlePicker({
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-medium truncate">{a.title}</p>
                   <p className="text-[9px] text-muted-foreground truncate">
-                    /p/{a.slug} Â· {a.shortlink_publishers?.email}
+                    /p/{a.slug} · {a.shortlink_publishers?.email}
                   </p>
                 </div>
                 {value === a.id && (

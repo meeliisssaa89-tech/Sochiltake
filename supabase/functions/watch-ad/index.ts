@@ -90,7 +90,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    const reward = Number(ads.reward_per_ad) || 0;
+    const bulkMode = !!ads.bulk_reward_mode;
+    const isLastSlot = slotIndex === (ads.daily_count - 1);
+    // In bulk mode: reward=0 per slot, credit completion_reward only on last slot
+    const reward = bulkMode
+      ? (isLastSlot ? (Number(ads.completion_reward) || Number(ads.reward_per_ad) || 0) : 0)
+      : (Number(ads.reward_per_ad) || 0);
     const xp = Number(ads.xp_per_ad) || 0;
 
     // Insert ad watch (unique per user/date/slot).
@@ -146,7 +151,7 @@ Deno.serve(async (req) => {
     await supabase.from('activity_feed').insert({
       user_id: userId,
       type: 'ad_watched',
-      message: `Ad #${slotIndex + 1} watched`,
+      message: bulkMode && isLastSlot ? 'All ads completed — reward earned!' : `Ad #${slotIndex + 1} watched`,
       meta: { reward, xp, symbol: resolvedSymbol }
     });
 

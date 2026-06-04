@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { usePreferredCurrency } from '@/components/OnboardingModal';
   import { motion, AnimatePresence } from "framer-motion";
   import { useLanguage } from "@/contexts/LanguageContext";
   import { useUser } from "@/contexts/UserContext";
@@ -35,6 +36,7 @@ import { useState } from "react";
 
     const { data: tasks, isLoading: tasksLoading } = useTasks();
     const { data: allCurrencies } = useCurrencies();
+    const preferredCurrencyId = usePreferredCurrency();
     const { data: userTasks } = useUserTasks(user?.telegram_id);
     const verifyMutation = useVerifyTask();
 
@@ -106,6 +108,14 @@ import { useState } from "react";
       return allCurrencies?.find((c: any) => c.id === task.reward_currency_id);
     };
 
+    const getPreferredReward = (task: any) => {
+      if (!preferredCurrencyId) return null;
+      const extras = Array.isArray(task.extra_rewards) ? task.extra_rewards : [];
+      const match = extras.find((r: any) => r.currency_id === preferredCurrencyId && Number(r.amount) > 0);
+      if (!match) return null;
+      const cur = allCurrencies?.find((c: any) => c.id === preferredCurrencyId);
+      return cur ? { amount: match.amount, currency: cur } : null;
+    };
     const getTaskCountries = (task: any): string[] => {
       const c = task.metadata?.countries;
       if (!c) return [];
@@ -252,17 +262,22 @@ import { useState } from "react";
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        {/* Reward */}
-                        {task.reward_amount > 0 && (
-                          <div className="flex items-center gap-1">
-                            {currency?.icon_url ? (
-                              <img src={currency.icon_url} alt="" className="w-3.5 h-3.5 rounded-full" />
-                            ) : (
-                              <Coins className="w-3.5 h-3.5 text-yellow-400" />
-                            )}
-                            <span className="text-xs text-yellow-400 font-bold">+{task.reward_amount} {currency?.symbol || ""}</span>
-                          </div>
-                        )}
+                        {/* Reward — show preferred currency if available */}
+                        {task.reward_amount > 0 && (() => {
+                          const pref = getPreferredReward(task);
+                          const displayCur = pref?.currency || currency;
+                          const displayAmt = pref?.amount || task.reward_amount;
+                          return (
+                            <div className="flex items-center gap-1">
+                              {displayCur?.icon_url ? (
+                                <img src={displayCur.icon_url} alt="" className="w-3.5 h-3.5 rounded-full" />
+                              ) : (
+                                <Coins className="w-3.5 h-3.5 text-yellow-400" />
+                              )}
+                              <span className="text-xs text-yellow-400 font-bold">+{displayAmt} {displayCur?.symbol || ""}</span>
+                            </div>
+                          );
+                        })()}
                         {/* Submission fields badges */}
                         {submFields.includes("email") && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: "rgba(99,102,241,0.15)", color: "rgba(167,139,250,0.8)" }}>Email</span>

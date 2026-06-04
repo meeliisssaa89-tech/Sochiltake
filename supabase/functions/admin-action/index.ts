@@ -113,6 +113,48 @@ Deno.serve(async (req) => {
         return json({ ok: true, newAmount: next });
       }
 
+
+      case 'approve_submission': {
+        const { userTaskId, userId, currencyId, rewardAmount, xpReward } = payload || {};
+        if (!userTaskId) return json({ error: 'userTaskId required' }, 400);
+        const { error: updErr } = await admin
+          .from('user_tasks')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', userTaskId);
+        if (updErr) return json({ error: updErr.message }, 400);
+        // Credit balance
+        if (currencyId && Number(rewardAmount) > 0) {
+          const { data: bal } = await admin.from('balances').select('id, amount').eq('user_id', userId).eq('currency_id', currencyId).maybeSingle();
+          if (bal?.id) {
+            await admin.from('balances').update({ amount: Number(bal.amount) + Number(rewardAmount) }).eq('id', bal.id);
+          } else {
+            await admin.from('balances').insert({ user_id: userId, currency_id: currencyId, amount: Number(rewardAmount) });
+          }
+        }
+        // Add XP
+        if (Number(xpReward) > 0) {
+          const { data: u } = await admin.from('users').select('exp').eq('telegram_id', userId).maybeSingle();
+          if (u) {
+            const newExp = (Number(u.exp) || 0) + Number(xpReward);
+            await admin.from('users').update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 }).eq('telegram_id', userId);
+          }
+        }
+        // Activity feed
+        await admin.from('activity_feed').insert({ user_id: userId, type: 'task_completion', message: 'Submission approved', meta: { reward: rewardAmount } }).catch(() => {});
+        return json({ ok: true });
+      }
+
+      case 'reject_submission': {
+        const { userTaskId } = payload || {};
+        if (!userTaskId) return json({ error: 'userTaskId required' }, 400);
+        const { error } = await admin
+          .from('user_tasks')
+          .update({ status: 'rejected', metadata: { rejected_at: new Date().toISOString() } })
+          .eq('id', userTaskId);
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true });
+      }
+
       case 'list_admins': {
         const { data } = await admin.from('admin_emails').select('email, created_at').order('created_at');
         return json({ admins: data || [] });
