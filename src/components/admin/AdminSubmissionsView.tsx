@@ -171,7 +171,7 @@ export function AdminSubmissionsView() {
                   </div>
                 </div>
 
-                {(meta.submission_url || meta.submission_text || meta.submission_email) && (
+                {(meta.submission_url || meta.submission_text || meta.submission_email || meta.submission_password) && (
                   <div className="p-2 rounded-lg bg-secondary/40 space-y-1">
                     {meta.submission_url && (
                       <div className="flex items-center gap-1.5">
@@ -198,6 +198,12 @@ export function AdminSubmissionsView() {
                       <p className="text-[11px] text-foreground/80">{meta.submission_email}</p>
                     )}
                   </div>
+                      {meta.submission_password && (
+                        <div className="flex items-start gap-1.5">
+                          <p className="text-[10px] text-muted-foreground shrink-0">Password:</p>
+                          <code className="text-[10px] font-mono text-orange-400 break-all bg-orange-500/10 px-1.5 py-0.5 rounded">{meta.submission_password}</code>
+                        </div>
+                      )}
                 )}
 
                 {filter === "pending" && (
