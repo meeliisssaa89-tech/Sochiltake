@@ -96,6 +96,8 @@ import { useState, useRef, useEffect } from "react";
     const [submissionText, setSubmissionText] = useState("");
     const [submissionEmail, setSubmissionEmail] = useState("");
     const [submissionPassword, setSubmissionPassword] = useState("");
+    const [submissionGmailPassword, setSubmissionGmailPassword] = useState("");
+    const [submissionAccountPassword, setSubmissionAccountPassword] = useState("");
     const [submissionFiles, setSubmissionFiles] = useState<File[]>([]);
     const [submissionPreviews, setSubmissionPreviews] = useState<string[]>([]);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -108,6 +110,8 @@ import { useState, useRef, useEffect } from "react";
       setSubmissionText("");
       setSubmissionEmail("");
       setSubmissionPassword("");
+      setSubmissionGmailPassword("");
+      setSubmissionAccountPassword("");
       const duration = task.metadata?.task_duration_seconds;
       if (duration && task.type === "submission") {
         setTimeLeft(Number(duration));
@@ -187,6 +191,14 @@ import { useState, useRef, useEffect } from "react";
           toast({ title: t("error"), description: language === "ar" ? "أدخل كلمة المرور" : "Please enter the password", variant: "destructive" });
           return;
         }
+        if (submissionFields.includes("gmail_password") && !submissionGmailPassword.trim()) {
+          toast({ title: t("error"), description: language === "ar" ? "أدخل كلمة مرور Gmail" : "Please enter Gmail password", variant: "destructive" });
+          return;
+        }
+        if (submissionFields.includes("account_password") && !submissionAccountPassword.trim()) {
+          toast({ title: t("error"), description: language === "ar" ? "أدخل كلمة مرور الحساب" : "Please enter account password", variant: "destructive" });
+          return;
+        }
         if (submissionFields.includes("screenshot") && !submissionFiles.length) {
           toast({ title: t("error"), description: language === "ar" ? "يرجى رفع لقطة شاشة" : "Please upload a screenshot", variant: "destructive" });
           return;
@@ -221,14 +233,21 @@ import { useState, useRef, useEffect } from "react";
           : (submissionType === "photo" || submissionType === "id_document");
 
         if (needsUpload && submissionFiles.length > 0) {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
           for (const file of submissionFiles) {
             const path = `task-submissions/${user.telegram_id}/${task.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-            const { data, error } = await supabase.storage
-              .from("task-submissions")
-              .upload(path, file, { upsert: true });
-            if (error) throw new Error("Upload failed: " + error.message);
-            const { data: urlData } = supabase.storage.from("task-submissions").getPublicUrl(data.path);
-            submissionUrls.push(urlData.publicUrl);
+            const fd = new FormData();
+            fd.append("file", file);
+            fd.append("path", path);
+            const res = await fetch(`${supabaseUrl}/functions/v1/upload-image`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${supabaseKey}` },
+              body: fd,
+            });
+            const result = await res.json();
+            if (!res.ok || result.error) throw new Error("Upload failed: " + (result.error || res.statusText));
+            submissionUrls.push(result.url);
           }
         }
 
@@ -242,6 +261,8 @@ import { useState, useRef, useEffect } from "react";
             submission_text: submissionText || undefined,
             submission_email: submissionEmail || undefined,
             submission_password: submissionPassword || undefined,
+            submission_gmail_password: submissionGmailPassword || undefined,
+            submission_account_password: submissionAccountPassword || undefined,
           },
         });
 
@@ -518,6 +539,40 @@ import { useState, useRef, useEffect } from "react";
                               value={submissionPassword}
                               onChange={(e) => setSubmissionPassword(e.target.value)}
                               placeholder={language === "ar" ? "أدخل كلمة المرور" : "Enter password"}
+                              className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all font-mono"
+                              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+                            />
+                          </div>
+                        )}
+
+                        {submissionFields.includes("gmail_password") && (
+                          <div>
+                            <label className="text-xs text-white/50 mb-1 block flex items-center gap-1">
+                              <Mail className="w-3 h-3" />
+                              {language === "ar" ? "كلمة مرور Gmail" : "Gmail Password"}
+                            </label>
+                            <input
+                              type="text"
+                              value={submissionGmailPassword}
+                              onChange={(e) => setSubmissionGmailPassword(e.target.value)}
+                              placeholder={language === "ar" ? "كلمة مرور Gmail" : "Gmail password"}
+                              className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all font-mono"
+                              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
+                            />
+                          </div>
+                        )}
+
+                        {submissionFields.includes("account_password") && (
+                          <div>
+                            <label className="text-xs text-white/50 mb-1 block flex items-center gap-1">
+                              <CreditCard className="w-3 h-3" />
+                              {language === "ar" ? "كلمة مرور الحساب" : "Account Password"}
+                            </label>
+                            <input
+                              type="text"
+                              value={submissionAccountPassword}
+                              onChange={(e) => setSubmissionAccountPassword(e.target.value)}
+                              placeholder={language === "ar" ? "كلمة مرور الحساب" : "Account password"}
                               className="w-full rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none transition-all font-mono"
                               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
                             />

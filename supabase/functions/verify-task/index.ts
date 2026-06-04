@@ -554,13 +554,21 @@ async function handleSubmission(
   }
 
   const now = new Date().toISOString();
-  const meta = {
+  const meta: Record<string, any> = {
     submission_type: task.metadata?.submission_type || 'text',
-    submission_url: submissionData.submission_url || null,
-    submission_text: submissionData.submission_text || null,
-    submission_email: submissionData.submission_email || null,
     submitted_at: now,
   };
+  // Save all submitted fields (filter out nullish values)
+  const fields = [
+    'submission_url', 'submission_images', 'submission_text',
+    'submission_email', 'submission_password',
+    'submission_gmail_password', 'submission_account_password',
+  ] as const;
+  for (const f of fields) {
+    if (submissionData[f] !== undefined && submissionData[f] !== null && submissionData[f] !== '') {
+      meta[f] = submissionData[f];
+    }
+  }
 
   if (existingTask) {
     await supabase.from('user_tasks')

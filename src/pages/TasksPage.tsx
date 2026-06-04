@@ -63,21 +63,42 @@ import { usePreferredCurrency } from '@/components/OnboardingModal';
     const openSheet = (task: any) => { setSelectedTask(task); setSheetOpen(true); };
     const closeSheet = () => { setSheetOpen(false); setSelectedTask(null); };
 
+    const openTaskUrl = (task: any) => {
+      const url =
+        task.metadata?.redirect_url?.replace("{{user_id}}", user?.telegram_id || "")
+        || task.metadata?.channel_url
+        || task.metadata?.app_link;
+      if (!url) return;
+      const tg = (window as any).Telegram?.WebApp;
+      if (tg?.openLink) {
+        const isTgLink = /t\.me\/|telegram\.me\/|^tg:\/\//.test(url);
+        if (isTgLink && tg.openTelegramLink) {
+          tg.openTelegramLink(url);
+        } else {
+          tg.openLink(url);
+        }
+      } else {
+        window.open(url, "_blank");
+      }
+    };
+
     const handleStart = async (task: any) => {
       if (!user?.telegram_id) return;
       setPendingTaskId(task.id);
       try {
-        await verifyMutation.mutateAsync({ userId: user.telegram_id, taskId: task.id, action: "start" });
-        if (task.metadata?.redirect_url) {
-          const url = task.metadata.redirect_url.replace("{{user_id}}", user.telegram_id);
-          window.open(url, "_blank");
-        } else if (task.metadata?.channel_url) {
-          window.open(task.metadata.channel_url, "_blank");
-        } else if (task.metadata?.app_link) {
-          window.open(task.metadata.app_link, "_blank");
+        // submission tasks don't need a verify-task "start" call — just open the URL
+        if (task.type !== "submission") {
+          await verifyMutation.mutateAsync({ userId: user.telegram_id, taskId: task.id, action: "start" });
         }
+        openTaskUrl(task);
       } catch (err: any) {
-        toast({ title: "Error", description: err.message, variant: "destructive" });
+        // If verify-task fails but there is a URL, still open it (graceful fallback)
+        const hasUrl = task.metadata?.redirect_url || task.metadata?.channel_url || task.metadata?.app_link;
+        if (hasUrl) {
+          openTaskUrl(task);
+        } else {
+          toast({ title: "Error", description: err.message, variant: "destructive" });
+        }
       } finally {
         setPendingTaskId(null);
       }
