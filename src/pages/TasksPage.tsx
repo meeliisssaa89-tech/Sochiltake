@@ -134,11 +134,24 @@ import { usePreferredCurrency } from '@/components/OnboardingModal';
 
     const getPreferredReward = (task: any) => {
       if (!preferredCurrencyId) return null;
+      // Already showing the preferred currency
+      if (task.reward_currency_id === preferredCurrencyId) return null;
+      // Check extra_rewards first
       const extras = Array.isArray(task.extra_rewards) ? task.extra_rewards : [];
       const match = extras.find((r: any) => r.currency_id === preferredCurrencyId && Number(r.amount) > 0);
-      if (!match) return null;
-      const cur = allCurrencies?.find((c: any) => c.id === preferredCurrencyId);
-      return cur ? { amount: match.amount, currency: cur } : null;
+      if (match) {
+        const cur = allCurrencies?.find((c: any) => c.id === preferredCurrencyId);
+        return cur ? { amount: match.amount, currency: cur } : null;
+      }
+      // Fallback: convert via exchange_rate
+      const taskCur = allCurrencies?.find((c: any) => c.id === task.reward_currency_id);
+      const prefCur = allCurrencies?.find((c: any) => c.id === preferredCurrencyId);
+      if (taskCur && prefCur && Number(taskCur.exchange_rate) > 0 && Number(prefCur.exchange_rate) > 0) {
+        const converted = Number(task.reward_amount) * Number(taskCur.exchange_rate) / Number(prefCur.exchange_rate);
+        const formatted = converted >= 1 ? converted.toFixed(2) : converted.toFixed(6).replace(/\.?0+$/, '');
+        return { amount: formatted, currency: prefCur };
+      }
+      return null;
     };
     const getTaskCountries = (task: any): string[] => {
       const c = task.metadata?.countries;

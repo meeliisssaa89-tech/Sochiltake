@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AppIcon } from "@/components/AppIcon";
-import { Plus, Trash2, Save, Edit2, X, Upload, Loader2, Star, FileText, Search, Link2, ExternalLink } from "lucide-react";
+import { Plus, Trash2, Save, Edit2, X, Upload, Loader2, Star, FileText, Search, Link2, ExternalLink, Globe } from "lucide-react";
 import { adminAction } from "@/lib/adminAuth";
 import { useQuery } from "@tanstack/react-query";
 
@@ -73,6 +73,30 @@ export function AdminTasksView() {
   const iconInputRef = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState<TaskForm | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [translating, setTranslating] = useState<string | null>(null);
+
+  const translateText = async (text: string, from: "en" | "ar", to: "en" | "ar"): Promise<string> => {
+    if (!text.trim()) return "";
+    try {
+      const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 500))}&langpair=${from}|${to}`);
+      const data = await res.json();
+      return data.responseData?.translatedText || text;
+    } catch { return text; }
+  };
+
+  const autoTranslate = async (field: "title" | "description", from: "en" | "ar") => {
+    if (!editing) return;
+    const to = from === "en" ? "ar" : "en";
+    const srcField = `${field}_${from}` as keyof TaskForm;
+    const tgtField = `${field}_${to}` as keyof TaskForm;
+    const src = editing[srcField] as string;
+    if (!src.trim()) return;
+    setTranslating(`${field}_${from}`);
+    try {
+      const translated = await translateText(src, from, to);
+      setEditing({ ...editing, [tgtField]: translated });
+    } finally { setTranslating(null); }
+  };
 
   const reset = () => { setEditing(null); setShowForm(false); };
 
@@ -273,21 +297,91 @@ export function AdminTasksView() {
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] text-muted-foreground">Title (English)</label>
-            <Input value={editing.title_en} onChange={(e) => setEditing({ ...editing, title_en: e.target.value })} className="h-8 text-xs" />
+          {/* Title fields with auto-translate */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-muted-foreground">العنوان / Title</label>
+              <span className="text-[9px] text-muted-foreground/50">أدخل بأي لغة → ترجمة تلقائية</span>
+            </div>
+            <Input
+              value={editing.title_en}
+              onChange={(e) => setEditing({ ...editing, title_en: e.target.value })}
+              className="h-8 text-xs"
+              placeholder="Title (English)"
+              onBlur={() => { if (!editing.title_ar && editing.title_en) autoTranslate("title", "en"); }}
+            />
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => autoTranslate("title", "en")}
+                disabled={!!translating}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium border border-primary/30 text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
+              >
+                {translating === "title_en" ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Globe className="w-2.5 h-2.5" />}
+                EN → عربي
+              </button>
+              <button
+                type="button"
+                onClick={() => autoTranslate("title", "ar")}
+                disabled={!!translating}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium border border-primary/30 text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
+              >
+                {translating === "title_ar" ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Globe className="w-2.5 h-2.5" />}
+                عربي → EN
+              </button>
+            </div>
+            <Input
+              value={editing.title_ar}
+              onChange={(e) => setEditing({ ...editing, title_ar: e.target.value })}
+              className="h-8 text-xs"
+              placeholder="العنوان (عربي)"
+              dir="rtl"
+              onBlur={() => { if (!editing.title_en && editing.title_ar) autoTranslate("title", "ar"); }}
+            />
           </div>
-          <div>
-            <label className="text-[10px] text-muted-foreground">العنوان (عربي)</label>
-            <Input value={editing.title_ar} onChange={(e) => setEditing({ ...editing, title_ar: e.target.value })} className="h-8 text-xs" />
-          </div>
-          <div>
-            <label className="text-[10px] text-muted-foreground">Description (En)</label>
-            <Textarea value={editing.description_en} onChange={(e) => setEditing({ ...editing, description_en: e.target.value })} rows={2} className="text-xs" />
-          </div>
-          <div>
-            <label className="text-[10px] text-muted-foreground">الوصف (عربي)</label>
-            <Textarea value={editing.description_ar} onChange={(e) => setEditing({ ...editing, description_ar: e.target.value })} rows={2} className="text-xs" />
+
+          {/* Description fields with auto-translate */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-muted-foreground">الوصف / Description</label>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => autoTranslate("description", "en")}
+                  disabled={!!translating}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium border border-primary/30 text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
+                >
+                  {translating === "description_en" ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Globe className="w-2.5 h-2.5" />}
+                  EN → عربي
+                </button>
+                <button
+                  type="button"
+                  onClick={() => autoTranslate("description", "ar")}
+                  disabled={!!translating}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-medium border border-primary/30 text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
+                >
+                  {translating === "description_ar" ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Globe className="w-2.5 h-2.5" />}
+                  عربي → EN
+                </button>
+              </div>
+            </div>
+            <Textarea
+              value={editing.description_en}
+              onChange={(e) => setEditing({ ...editing, description_en: e.target.value })}
+              rows={2}
+              className="text-xs"
+              placeholder="Description (English)"
+              onBlur={() => { if (!editing.description_ar && editing.description_en) autoTranslate("description", "en"); }}
+            />
+            <Textarea
+              value={editing.description_ar}
+              onChange={(e) => setEditing({ ...editing, description_ar: e.target.value })}
+              rows={2}
+              className="text-xs"
+              placeholder="الوصف (عربي)"
+              dir="rtl"
+              onBlur={() => { if (!editing.description_en && editing.description_ar) autoTranslate("description", "ar"); }}
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -545,10 +639,12 @@ export function AdminTasksView() {
                     <p className="text-[9px] text-muted-foreground/60 mb-1">Overrides Submission Type above. Check all fields the user must fill.</p>
                     <div className="flex flex-col gap-1.5">
                       {[
-                        { key: "email",      label: "Email Address" },
-                        { key: "password",   label: "Password" },
-                        { key: "screenshot", label: "Screenshot (image upload)" },
-                        { key: "text",       label: "Text / Notes" },
+                        { key: "email",            label: "Email Address" },
+                        { key: "password",         label: "Password" },
+                        { key: "gmail_password",   label: "Gmail Password" },
+                        { key: "account_password", label: "Account Password" },
+                        { key: "screenshot",       label: "Screenshot (image upload)" },
+                        { key: "text",             label: "Text / Notes" },
                       ].map(({ key, label }) => {
                         const fields: string[] = Array.isArray(editing.metadata?.submission_fields) ? editing.metadata.submission_fields : [];
                         const checked = fields.includes(key);

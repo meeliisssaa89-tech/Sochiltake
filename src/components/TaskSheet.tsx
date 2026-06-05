@@ -277,6 +277,22 @@ import { useState, useRef, useEffect } from "react";
 
     const rewardCurrency = allCurrencies?.find((c: any) => c.id === task.reward_currency_id);
 
+    // Preferred currency: convert reward to user's preferred display currency
+    const preferredCurrencyId = typeof window !== "undefined" ? localStorage.getItem("preferred_currency_id") : null;
+    const preferredCurrency = preferredCurrencyId ? allCurrencies?.find((c: any) => c.id === preferredCurrencyId) : null;
+    const canConvert = !!(
+      preferredCurrency &&
+      rewardCurrency &&
+      preferredCurrency.id !== rewardCurrency.id &&
+      Number(rewardCurrency.exchange_rate) > 0 &&
+      Number(preferredCurrency.exchange_rate) > 0
+    );
+    const displayCurrency = canConvert ? preferredCurrency : rewardCurrency;
+    const displayAmount = canConvert
+      ? +(Number(task.reward_amount) * Number(rewardCurrency!.exchange_rate) / Number(preferredCurrency!.exchange_rate)).toFixed(6)
+      : task.reward_amount;
+    const showUsdEquiv = !canConvert && rewardCurrency?.exchange_rate && Number(rewardCurrency.exchange_rate) > 0;
+
     return (
       <AnimatePresence>
         {open && (
@@ -459,17 +475,22 @@ import { useState, useRef, useEffect } from "react";
                     className="flex items-center gap-3 p-3.5 rounded-2xl"
                     style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
                   >
-                    {rewardCurrency?.icon_url ? (
-                      <img src={rewardCurrency.icon_url} alt="" className="w-8 h-8 rounded-full object-contain shrink-0" />
+                    {displayCurrency?.icon_url ? (
+                      <img src={displayCurrency.icon_url} alt="" className="w-8 h-8 rounded-full object-contain shrink-0" />
                     ) : (
                       <Coins className="w-8 h-8 text-yellow-400 shrink-0" />
                     )}
                     <div>
                       <p className="text-[10px] text-white/40 uppercase tracking-wider">{t("reward")}</p>
-                      <p className="text-lg font-black text-yellow-400">+{task.reward_amount} {rewardCurrency?.symbol || ""}</p>
-                      {rewardCurrency?.exchange_rate && Number(rewardCurrency.exchange_rate) > 0 && (
+                      <p className="text-lg font-black text-yellow-400">+{displayAmount} {displayCurrency?.symbol || ""}</p>
+                      {canConvert && (
                         <p className="text-[10px] text-white/30">
-                          ≈ ${(Number(task.reward_amount) * Number(rewardCurrency.exchange_rate)).toFixed(2)} USD
+                          {task.reward_amount} {rewardCurrency?.symbol}
+                        </p>
+                      )}
+                      {showUsdEquiv && (
+                        <p className="text-[10px] text-white/30">
+                          ≈ ${(Number(task.reward_amount) * Number(rewardCurrency!.exchange_rate)).toFixed(2)} USD
                         </p>
                       )}
                     </div>
