@@ -11,7 +11,52 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { userId, taskId, action, code, submissionData } = await req.json();
+    const body = await req.json();
+    const { userId, taskId, action, code, submissionData, userTaskId, currencyId, rewardAmount, xpReward } = body;
+
+    // ── Admin-only actions: bypass normal task routing ──
+    if (action === 'admin_approve' || action === 'admin_reject') {
+      if (!userTaskId) {
+        return new Response(
+          JSON.stringify({ error: 'userTaskId required for admin actions' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const adminUrl = Deno.env.get('SUPABASE_URL')!;
+      const adminKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const adminSb = createClient(adminUrl, adminKey);
+
+      if (action === 'admin_reject') {
+        const { error } = await adminSb.from('user_tasks').update({ status: 'rejected' }).eq('id', userTaskId);
+        if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      // admin_approve: mark complete + credit reward
+      const { error: utErr } = await adminSb.from('user_tasks')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', userTaskId);
+      if (utErr) return new Response(JSON.stringify({ error: utErr.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      // Credit currency balance (read-then-write with service role)
+      const amt = Number(rewardAmount || 0);
+      const uid = userId;
+      if (amt > 0 && currencyId && uid) {
+        const { data: balRow } = await adminSb.from('balances').select('amount').eq('user_id', uid).eq('currency_id', currencyId).maybeSingle();
+        const newAmt = Number(balRow?.amount || 0) + amt;
+        await adminSb.from('balances').upsert({ user_id: uid, currency_id: currencyId, amount: newAmt }, { onConflict: 'user_id,currency_id' });
+      }
+      // Credit XP
+      const xp = Number(xpReward || 0);
+      if (xp > 0 && uid) {
+        const { data: uRow } = await adminSb.from('users').select('exp, level').eq('telegram_id', uid).single();
+        if (uRow) {
+          const newExp = (uRow.exp || 0) + xp;
+          await adminSb.from('users').update({ exp: newExp, level: Math.floor(newExp / 5000) + 1 }).eq('telegram_id', uid);
+        }
+      }
+      return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     if (!userId || !taskId) {
       return new Response(

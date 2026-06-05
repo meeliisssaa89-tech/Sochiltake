@@ -64,11 +64,14 @@ import { usePreferredCurrency } from '@/components/OnboardingModal';
     const closeSheet = () => { setSheetOpen(false); setSelectedTask(null); };
 
     const openTaskUrl = (task: any) => {
-      const url =
-        task.metadata?.redirect_url?.replace("{{user_id}}", user?.telegram_id || "")
+      const uid = user?.telegram_id || "";
+      const rawUrl =
+        task.metadata?.redirect_url
         || task.metadata?.channel_url
+        || task.metadata?.url
         || task.metadata?.app_link;
-      if (!url) return;
+      if (!rawUrl) return;
+      const url = rawUrl.replace("{{user_id}}", uid).replace("{user_id}", uid);
       const tg = (window as any).Telegram?.WebApp;
       if (tg?.openLink) {
         const isTgLink = /t\.me\/|telegram\.me\/|^tg:\/\//.test(url);

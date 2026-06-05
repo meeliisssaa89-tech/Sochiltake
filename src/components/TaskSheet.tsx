@@ -467,6 +467,11 @@ import { useState, useRef, useEffect } from "react";
                     <div>
                       <p className="text-[10px] text-white/40 uppercase tracking-wider">{t("reward")}</p>
                       <p className="text-lg font-black text-yellow-400">+{task.reward_amount} {rewardCurrency?.symbol || ""}</p>
+                      {rewardCurrency?.exchange_rate && Number(rewardCurrency.exchange_rate) > 0 && (
+                        <p className="text-[10px] text-white/30">
+                          ≈ ${(Number(task.reward_amount) * Number(rewardCurrency.exchange_rate)).toFixed(2)} USD
+                        </p>
+                      )}
                     </div>
                     {task.xp_reward > 0 && (
                       <div className="ms-auto">

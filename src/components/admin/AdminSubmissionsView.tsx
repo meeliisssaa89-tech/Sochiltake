@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   CheckCircle2, XCircle, Loader2, Camera, Mail, FileText, CreditCard,
-  User, ExternalLink, Image as ImageIcon, Copy, ChevronDown, ChevronUp,
+  User, ExternalLink, Image as ImageIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -19,78 +19,6 @@ interface Submission {
   metadata: any;
   tasks: { title_en: string; title_ar?: string; reward_amount: number; reward_currency_id: string; xp_reward: number; currencies?: { symbol: string } };
   users: { first_name?: string; username?: string; photo_url?: string; telegram_id: string };
-}
-
-const SQL_MIGRATION = `-- Paste in Supabase SQL Editor (once):
-CREATE OR REPLACE FUNCTION public.admin_approve_submission(
-  p_user_task_id uuid, p_user_id text,
-  p_currency_id uuid DEFAULT NULL,
-  p_reward_amount numeric DEFAULT 0, p_xp_reward int DEFAULT 0
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  UPDATE user_tasks SET status='completed', completed_at=NOW() WHERE id=p_user_task_id;
-  IF p_reward_amount>0 AND p_currency_id IS NOT NULL THEN
-    INSERT INTO balances(user_id,currency_id,amount) VALUES(p_user_id,p_currency_id,p_reward_amount)
-    ON CONFLICT(user_id,currency_id) DO UPDATE SET amount=balances.amount+p_reward_amount;
-  END IF;
-  IF p_xp_reward>0 THEN UPDATE users SET exp=COALESCE(exp,0)+p_xp_reward WHERE telegram_id=p_user_id; END IF;
-  RETURN jsonb_build_object('ok',true);
-EXCEPTION WHEN OTHERS THEN RETURN jsonb_build_object('error',SQLERRM); END; $$;
-
-CREATE OR REPLACE FUNCTION public.admin_reject_submission(p_user_task_id uuid)
-RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  UPDATE user_tasks SET status='rejected' WHERE id=p_user_task_id;
-  RETURN jsonb_build_object('ok',true);
-EXCEPTION WHEN OTHERS THEN RETURN jsonb_build_object('error',SQLERRM); END; $$;`;
-
-function SqlSetupBanner() {
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(SQL_MIGRATION);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-3 space-y-2">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between text-xs text-yellow-400 font-semibold"
-      >
-        <span>⚙️ One-time SQL setup required for approve/reject</span>
-        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-      </button>
-      {open && (
-        <div className="space-y-2">
-          <p className="text-[10px] text-yellow-300/70">
-            Open your{" "}
-            <a
-              href={`https://supabase.com/dashboard/project/${import.meta.env.VITE_SUPABASE_PROJECT_ID || "_"}/sql`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              Supabase SQL Editor
-            </a>
-            , paste this SQL and click Run.
-          </p>
-          <pre className="text-[9px] text-white/60 bg-black/30 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">
-            {SQL_MIGRATION}
-          </pre>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 text-[10px] rounded-lg border-yellow-500/40 text-yellow-400"
-            onClick={copy}
-          >
-            <Copy className="w-3 h-3 me-1" />
-            {copied ? "Copied!" : "Copy SQL"}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export function AdminSubmissionsView() {
@@ -120,30 +48,39 @@ export function AdminSubmissionsView() {
     staleTime: 30_000,
   });
 
+  const callEdgeFn = async (action: string, sub: Submission) => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    const res = await fetch(`${supabaseUrl}/functions/v1/verify-task`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action,
+        userTaskId: sub.id,
+        userId: sub.user_id,
+        currencyId: sub.tasks.reward_currency_id || null,
+        rewardAmount: sub.tasks.reward_amount || 0,
+        xpReward: sub.tasks.xp_reward || 0,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || `HTTP ${res.status}`);
+    return json;
+  };
+
   const approve = async (sub: Submission) => {
     if (!confirm(`Approve and credit ${sub.tasks.reward_amount} ${sub.tasks.currencies?.symbol || ""}?`)) return;
     setProcessing(sub.id);
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc("admin_approve_submission", {
-        p_user_task_id: sub.id,
-        p_user_id: sub.user_id,
-        p_currency_id: sub.tasks.reward_currency_id || null,
-        p_reward_amount: sub.tasks.reward_amount || 0,
-        p_xp_reward: sub.tasks.xp_reward || 0,
-      });
-      if (rpcError || (rpcData as any)?.error) {
-        throw new Error(rpcError?.message || (rpcData as any)?.error || "Approval failed");
-      }
+      await callEdgeFn("admin_approve", sub);
       qc.invalidateQueries({ queryKey: ["admin-submissions"] });
       toast({ title: "✅ Approved", description: "Reward credited to user." });
       if (selected?.id === sub.id) setSelected(null);
     } catch (err: any) {
-      const msg: string = err.message || "";
-      if (msg.toLowerCase().includes("does not exist") || msg.toLowerCase().includes("function")) {
-        toast({ title: "SQL setup needed", description: "Run the SQL at the top of this page in Supabase.", variant: "destructive" });
-      } else {
-        toast({ title: "Error", description: msg, variant: "destructive" });
-      }
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setProcessing(null);
     }
@@ -153,22 +90,12 @@ export function AdminSubmissionsView() {
     if (!confirm("Reject this submission?")) return;
     setProcessing(sub.id);
     try {
-      const { data: rpcData, error: rpcError } = await supabase.rpc("admin_reject_submission", {
-        p_user_task_id: sub.id,
-      });
-      if (rpcError || (rpcData as any)?.error) {
-        throw new Error(rpcError?.message || (rpcData as any)?.error || "Rejection failed");
-      }
+      await callEdgeFn("admin_reject", sub);
       qc.invalidateQueries({ queryKey: ["admin-submissions"] });
       toast({ title: "Rejected" });
       if (selected?.id === sub.id) setSelected(null);
     } catch (err: any) {
-      const msg: string = err.message || "";
-      if (msg.toLowerCase().includes("does not exist") || msg.toLowerCase().includes("function")) {
-        toast({ title: "SQL setup needed", description: "Run the SQL at the top of this page in Supabase.", variant: "destructive" });
-      } else {
-        toast({ title: "Error", description: msg, variant: "destructive" });
-      }
+      toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setProcessing(null);
     }
@@ -185,14 +112,6 @@ export function AdminSubmissionsView() {
 
   const renderSubmissionData = (meta: any) => {
     const items: { label: string; value: string; isImage?: boolean; isSecret?: boolean }[] = [];
-
-    if (Array.isArray(meta?.submission_fields)) {
-      for (const f of meta.submission_fields) {
-        if (!f?.value) continue;
-        const isImage = f.type === "photo" || f.type === "screenshot" || String(f.value).match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i);
-        items.push({ label: f.label || f.type || "Field", value: String(f.value), isImage: !!isImage, isSecret: f.type === "password" });
-      }
-    }
 
     if (meta?.submission_email) items.push({ label: "Email", value: meta.submission_email });
     if (meta?.submission_password) items.push({ label: "Password", value: meta.submission_password, isSecret: true });
@@ -234,8 +153,6 @@ export function AdminSubmissionsView() {
 
   return (
     <div className="space-y-3">
-      <SqlSetupBanner />
-
       <div className="flex gap-1 p-1 rounded-xl bg-secondary/40">
         {(["pending", "completed", "rejected"] as const).map((f) => (
           <button
@@ -270,8 +187,7 @@ export function AdminSubmissionsView() {
             const isProcessing = processing === sub.id;
             const imageUrl =
               meta.submission_url ||
-              (Array.isArray(meta.submission_images) ? meta.submission_images[0] : null) ||
-              meta.submission_fields?.find((f: any) => f.type === "photo" || f.type === "screenshot")?.value;
+              (Array.isArray(meta.submission_images) ? meta.submission_images[0] : null);
 
             return (
               <motion.div key={sub.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-xl p-3 space-y-2">
@@ -299,7 +215,7 @@ export function AdminSubmissionsView() {
 
                 {renderSubmissionData(meta)}
 
-                {imageUrl && (
+                {imageUrl && String(imageUrl).match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i) && (
                   <button
                     onClick={() => setSelected(sub)}
                     className="w-full rounded-lg overflow-hidden border border-border/40 hover:border-primary/40 transition-colors"
@@ -357,10 +273,8 @@ export function AdminSubmissionsView() {
               className="max-w-sm w-full rounded-2xl overflow-hidden bg-card border border-border"
             >
               {(() => {
-                const imgUrl =
-                  selected.metadata?.submission_url ||
-                  (Array.isArray(selected.metadata?.submission_images) ? selected.metadata.submission_images[0] : null) ||
-                  selected.metadata?.submission_fields?.find((f: any) => f.type === "photo" || f.type === "screenshot")?.value;
+                const imgUrl = selected.metadata?.submission_url ||
+                  (Array.isArray(selected.metadata?.submission_images) ? selected.metadata.submission_images[0] : null);
                 return imgUrl ? <img src={imgUrl} alt="Submission" className="w-full max-h-96 object-contain" /> : null;
               })()}
               <div className="p-3 flex gap-2">

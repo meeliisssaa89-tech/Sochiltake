@@ -21,57 +21,74 @@ import { OnboardingModal } from "@/components/OnboardingModal";
 
   function Web3LoadingScreen() {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-8">
         <div className="relative flex items-center justify-center">
+          {/* Outer glow ring - blue/cyan */}
           <motion.div
             className="absolute rounded-full"
-            style={{ width: 130, height: 130, background: "radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%)" }}
-            animate={{ scale: [1, 1.7, 1], opacity: [0.5, 0.12, 0.5] }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ width: 160, height: 160, background: "conic-gradient(from 0deg, rgba(0,82,255,0.25), rgba(0,195,255,0.3), rgba(0,232,163,0.2), rgba(0,82,255,0.25))" }}
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
           />
+          {/* Middle ring - purple/pink */}
           <motion.div
             className="absolute rounded-full"
-            style={{ width: 95, height: 95, background: "radial-gradient(circle, rgba(139,92,246,0.4) 0%, transparent 70%)" }}
-            animate={{ scale: [1, 1.45, 1], opacity: [0.65, 0.18, 0.65] }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", delay: 0.3 }}
+            style={{ width: 118, height: 118, background: "conic-gradient(from 180deg, rgba(139,92,246,0.35), rgba(236,72,153,0.3), rgba(249,115,22,0.2), rgba(139,92,246,0.35))" }}
+            animate={{ rotate: [360, 0] }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
           />
+          {/* Pulse ring */}
+          <motion.div
+            className="absolute rounded-full border"
+            style={{ width: 96, height: 96, borderColor: "rgba(0,195,255,0.4)" }}
+            animate={{ scale: [1, 1.18, 1], opacity: [0.7, 0.15, 0.7] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          />
+          {/* Core sphere */}
           <motion.div
             className="relative rounded-full flex items-center justify-center"
             style={{
-              width: 74,
-              height: 74,
-              background: "radial-gradient(circle at 35% 30%, #a78bfa, #6366f1 50%, #4f46e5)",
-              boxShadow: "0 0 32px 10px rgba(99,102,241,0.6), 0 0 60px 20px rgba(139,92,246,0.3)",
+              width: 78,
+              height: 78,
+              background: "linear-gradient(135deg, #0052FF 0%, #00C3FF 40%, #00E8A3 80%, #6366F1 100%)",
+              boxShadow: "0 0 28px 8px rgba(0,82,255,0.5), 0 0 60px 20px rgba(0,195,255,0.25), 0 0 0 2px rgba(255,255,255,0.12)",
             }}
             animate={{
               boxShadow: [
-                "0 0 32px 10px rgba(99,102,241,0.6), 0 0 60px 20px rgba(139,92,246,0.3)",
-                "0 0 48px 18px rgba(99,102,241,0.9), 0 0 90px 32px rgba(139,92,246,0.5)",
-                "0 0 32px 10px rgba(99,102,241,0.6), 0 0 60px 20px rgba(139,92,246,0.3)",
+                "0 0 28px 8px rgba(0,82,255,0.5), 0 0 60px 20px rgba(0,195,255,0.25), 0 0 0 2px rgba(255,255,255,0.12)",
+                "0 0 40px 16px rgba(0,82,255,0.7), 0 0 90px 32px rgba(0,232,163,0.35), 0 0 0 2px rgba(255,255,255,0.2)",
+                "0 0 28px 8px rgba(0,82,255,0.5), 0 0 60px 20px rgba(0,195,255,0.25), 0 0 0 2px rgba(255,255,255,0.12)",
               ],
-              scale: [1, 1.05, 1],
+              scale: [1, 1.04, 1],
             }}
-            transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
           >
+            {/* Glass highlight */}
             <div
               className="absolute inset-0 rounded-full"
-              style={{ background: "radial-gradient(circle at 32% 28%, rgba(255,255,255,0.32), transparent 58%)" }}
+              style={{ background: "radial-gradient(ellipse at 35% 28%, rgba(255,255,255,0.38) 0%, transparent 60%)" }}
+            />
+            {/* Shine dot */}
+            <div
+              className="absolute"
+              style={{ top: "12%", left: "18%", width: "26%", height: "20%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.65) 0%, transparent 70%)" }}
             />
             <motion.span
               className="relative z-10 text-white font-black text-2xl select-none"
-              animate={{ rotateY: [0, 360] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+              style={{ textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}
+              animate={{ scale: [1, 1.08, 1] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
             >
               ◈
             </motion.span>
           </motion.div>
         </div>
 
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-3">
           <motion.h1
             className="text-2xl font-black tracking-widest"
             style={{
-              background: "linear-gradient(135deg, #a78bfa 0%, #6366f1 40%, #06b6d4 100%)",
+              background: "linear-gradient(90deg, #0052FF 0%, #00C3FF 35%, #00E8A3 65%, #6366F1 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               backgroundClip: "text",
@@ -82,21 +99,20 @@ import { OnboardingModal } from "@/components/OnboardingModal";
           >
             KYC P2P
           </motion.h1>
+          {/* Animated loading bar */}
           <motion.div
-            className="flex items-center gap-1.5"
+            className="w-24 h-0.5 rounded-full overflow-hidden"
+            style={{ background: "rgba(255,255,255,0.08)" }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.7, delay: 0.5 }}
+            transition={{ delay: 0.5 }}
           >
-            {[0, 1, 2].map((i) => (
-              <motion.div
-                key={i}
-                className="rounded-full"
-                style={{ width: 6, height: 6, background: "#6366f1" }}
-                animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.2, 0.8] }}
-                transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
-              />
-            ))}
+            <motion.div
+              className="h-full rounded-full"
+              style={{ background: "linear-gradient(90deg, #0052FF, #00C3FF, #00E8A3)" }}
+              animate={{ x: ["-100%", "100%"] }}
+              transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+            />
           </motion.div>
         </div>
       </div>
